@@ -67,33 +67,39 @@ export default function HomePage() {
 
   // Show notification immediately when task added
   async function showNotification(task) {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'New Task Added!',
-        body: `Task "${task.text}" has been added.`,
-        sound: true,
-      },
-      trigger: null, // null = show immediately
-    });
-  }
+  const notificationId = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'New Task Added!',
+      body: `Task "${task.text}" has been added.`,
+      sound: true,
+    },
+    trigger: {
+      seconds: 10, // Show after 60 seconds
+      repeats: false, // Do not repeat the notification
+    }, 
+  });
+  return notificationId;
+}
 
-  async function handleAddTask() {
-    if (!taskText.trim()) {
-      Alert.alert('Validation', 'Task cannot be empty.');
-      return;
-    }
-    const newTask = {
-      id: Date.now().toString(),
-      text: taskText,
-      priority,
-      completed: false,
-    };
-    const updatedTasks = [...tasks, newTask];
-    setTasks(updatedTasks);
-    setTaskText('');
-    await saveTasks(updatedTasks);
-    showNotification(newTask);
+ async function handleAddTask() {
+  if (!taskText.trim()) {
+    Alert.alert('Validation', 'Task cannot be empty.');
+    return;
   }
+  const newTask = {
+    id: Date.now().toString(),
+    text: taskText,
+    priority,
+    completed: false,
+    notificationId: null, // Add a field for the notification ID
+  };
+  const notificationId = await showNotification(newTask);
+  newTask.notificationId = notificationId; // Store the notification ID
+  const updatedTasks = [...tasks, newTask];
+  setTasks(updatedTasks);
+  setTaskText('');
+  await saveTasks(updatedTasks);
+}
 
   async function handleEditTask() {
     if (!taskText.trim()) {
@@ -127,12 +133,20 @@ export default function HomePage() {
   }
 
   async function toggleTaskCompletion(taskId) {
-    const updatedTasks = tasks.map((task) =>
-      task.id === taskId ? { ...task, completed: !task.completed } : task
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
-  }
+  const updatedTasks = tasks.map((task) => {
+    if (task.id === taskId) {
+      if (!task.completed && task.notificationId) {
+        // Cancel the notification if the task is being marked as complete
+        Notifications.cancelScheduledNotificationAsync(task.notificationId);
+      }
+      return { ...task, completed: !task.completed };
+    }
+    return task;
+  });
+  setTasks(updatedTasks);
+  await saveTasks(updatedTasks);
+}
+
 
   async function handleDeleteTask(taskId) {
     const updatedTasks = tasks.filter((task) => task.id !== taskId);
