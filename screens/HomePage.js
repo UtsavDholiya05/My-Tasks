@@ -35,7 +35,7 @@ export default function HomePage() {
   const [editTask, setEditTask] = useState(null);
   const [isModalVisible, setModalVisible] = useState(false);
   const [addButtonAnim] = useState(new Animated.Value(1));
-
+  const [notificationIds, setNotificationIds] = useState({}); // Store notification IDs
 
   // Request notification permissions & setup channel on mount
   useEffect(() => {
@@ -50,6 +50,7 @@ export default function HomePage() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
+          
           "Permission required",
           "Please enable notifications in settings to receive alerts."
         );
@@ -79,19 +80,20 @@ export default function HomePage() {
   }
 
   // Schedule a notification for testing (10 seconds later)
-  async function scheduleTestNotification() {
-    await Notifications.scheduleNotificationAsync({
+  async function scheduleTestNotification(taskId) {
+    const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Task Reminder",
-        body: taskText
-          ? `Priority: ${priority} - Time to complete: ${taskText}`
-          : "This is a test notification.",
+        body: `Priority: ${priority} - Time to complete: ${taskText}`,
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
         channelId: "default",
       },
       trigger: new Date(Date.now() + 10000), // 10 seconds from now
     });
+
+    // Save the notification ID associated with the task
+    setNotificationIds((prev) => ({ ...prev, [taskId]: notificationId }));
   }
 
   // Handle adding a task
@@ -171,9 +173,25 @@ export default function HomePage() {
 
   // Delete a task
   async function handleDeleteTask(taskId) {
+    console.log("Before deletion:", notificationIds);
+    console.log("Deleting task ID:", taskId);
+
     const updatedTasks = tasks.filter((task) => task.id !== taskId);
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
+
+    // Cancel the notification if it exists
+    if (notificationIds[taskId]) {
+      console.log("Cancelling notification ID:", notificationIds[taskId]);
+      await Notifications.cancelScheduledNotificationAsync(notificationIds[taskId]);
+      setNotificationIds((prev) => {
+        const updated = { ...prev };
+        delete updated[taskId];
+        return updated;
+      });
+    }
+
+    console.log("After deletion:", notificationIds);
   }
 
   const renderItem = ({ item, index }) => (
