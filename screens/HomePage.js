@@ -13,6 +13,17 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true, // Show banner notifications
+    shouldShowList: true,   // Show notifications in the notification center
+    shouldPlaySound: true,  // Play sound for notifications
+    shouldSetBadge: false,  // Do not set app badge
+  }),
+});
+
 
 export default function HomePage() {
   const [tasks, setTasks] = useState([]);
@@ -22,10 +33,18 @@ export default function HomePage() {
   const [editTask, setEditTask] = useState(null);
   const [isModalVisible, setModalVisible] = useState(false);
 
-  // Load tasks from AsyncStorage on app start
   useEffect(() => {
     loadTasks();
+    requestPermissions();
   }, []);
+
+  // Request notification permission
+  async function requestPermissions() {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please enable notifications to receive alerts');
+    }
+  }
 
   async function loadTasks() {
     try {
@@ -46,7 +65,18 @@ export default function HomePage() {
     }
   }
 
-  // Handle adding a task
+  // Show notification immediately when task added
+  async function showNotification(task) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'New Task Added!',
+        body: `Task "${task.text}" has been added.`,
+        sound: true,
+      },
+      trigger: null, // null = show immediately
+    });
+  }
+
   async function handleAddTask() {
     if (!taskText.trim()) {
       Alert.alert('Validation', 'Task cannot be empty.');
@@ -62,9 +92,9 @@ export default function HomePage() {
     setTasks(updatedTasks);
     setTaskText('');
     await saveTasks(updatedTasks);
+    showNotification(newTask);
   }
 
-  // Handle editing a task
   async function handleEditTask() {
     if (!taskText.trim()) {
       Alert.alert('Validation', 'Task cannot be empty.');
@@ -75,12 +105,11 @@ export default function HomePage() {
     );
     setTasks(updatedTasks);
     setEditTask(null);
-    setTaskText(''); // Clear the input field
+    setTaskText('');
     setModalVisible(false);
     await saveTasks(updatedTasks);
   }
 
-  // Animate priority selection
   function handlePrioritySelect(selectedPriority) {
     setPriority(selectedPriority);
     Animated.sequence([
@@ -97,7 +126,6 @@ export default function HomePage() {
     ]).start();
   }
 
-  // Handle toggling task completion
   async function toggleTaskCompletion(taskId) {
     const updatedTasks = tasks.map((task) =>
       task.id === taskId ? { ...task, completed: !task.completed } : task
@@ -106,7 +134,6 @@ export default function HomePage() {
     await saveTasks(updatedTasks);
   }
 
-  // Handle deleting a task
   async function handleDeleteTask(taskId) {
     const updatedTasks = tasks.filter((task) => task.id !== taskId);
     setTasks(updatedTasks);
@@ -136,13 +163,13 @@ export default function HomePage() {
       >
         <TouchableOpacity
           style={styles.taskContent}
-          onPress={() => toggleTaskCompletion(item.id)} // Toggle completion on click
+          onPress={() => toggleTaskCompletion(item.id)}
         >
           <Text style={styles.taskNumber}>{index + 1}.</Text>
           <Text
             style={[
               styles.taskText,
-              item.completed && styles.completedTaskText, // Apply strikethrough if completed
+              item.completed && styles.completedTaskText,
             ]}
           >
             {item.text}
@@ -154,7 +181,7 @@ export default function HomePage() {
             setEditTask(item);
             setTaskText(item.text);
             setPriority(item.priority);
-            setModalVisible(true); // Open modal for editing
+            setModalVisible(true);
           }}
         >
           <Text style={styles.editButtonText}>Edit</Text>
@@ -166,30 +193,25 @@ export default function HomePage() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
-        {/* Header Row */}
         <View style={styles.headerRow}>
-          <Text style={styles.header}>
-            {'New Task'}
-          </Text>
+          <Text style={styles.header}>New Task</Text>
           <TouchableOpacity
             style={styles.addButton}
             onPress={editTask ? handleEditTask : handleAddTask}
           >
             <Text style={styles.addButtonText}>
-              {'Add'}
+              {editTask ? 'Save' : 'Add'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Task Input */}
         <TextInput
           style={styles.input}
           placeholder="Task Title"
-          value={editTask ? '' : taskText} // Clear input when editing
+          value={taskText}
           onChangeText={setTaskText}
         />
 
-        {/* Priority Row */}
         <View style={styles.priorityRow}>
           {['High', 'Medium', 'Low'].map((level) => (
             <Animated.View
@@ -207,10 +229,8 @@ export default function HomePage() {
           ))}
         </View>
 
-        {/* Task List Heading */}
         <Text style={styles.taskListHeading}>Added Tasks</Text>
 
-        {/* Task List */}
         <FlatList
           data={tasks}
           keyExtractor={(item) => item.id}
@@ -218,7 +238,6 @@ export default function HomePage() {
           contentContainerStyle={styles.taskList}
         />
 
-        {/* Edit Modal */}
         <Modal visible={isModalVisible} transparent animationType="slide">
           <View style={styles.modalWrapper}>
             <View style={styles.modalContainer}>
@@ -267,7 +286,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: Platform.OS === 'android' ? 50 : 40,
     paddingHorizontal: 20,
-    backgroundColor: '#F4F6F8', // Soft grayish background
+    backgroundColor: '#F4F6F8',
   },
   headerRow: {
     flexDirection: 'row',
@@ -348,9 +367,9 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   taskItem: {
-    flexDirection: 'row', // Align items in a row
-    alignItems: 'center', // Vertically center items
-    justifyContent: 'space-between', // Space between task text and buttons
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 15,
     borderRadius: 12,
     marginBottom: 12,
@@ -361,36 +380,36 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   highPriorityBackground: {
-    backgroundColor: '#E63946', // Solid red for high priority
+    backgroundColor: '#E63946',
   },
   mediumPriorityBackground: {
-    backgroundColor: '#FFA500', // Solid orange for medium priority
+    backgroundColor: '#FFA500',
   },
   lowPriorityBackground: {
-    backgroundColor: '#2A9D8F', // Solid green for low priority
+    backgroundColor: '#2A9D8F',
   },
   taskContent: {
-    flexDirection: 'row', // Ensure task number and text are in a row
+    flexDirection: 'row',
     alignItems: 'center',
-    flex: 1, // Take up available space
+    flex: 1,
   },
   taskNumber: {
     fontSize: 16,
     fontWeight: '600',
     marginRight: 8,
-    color: '#fff', // Adjust text color for better contrast
+    color: '#fff',
   },
   taskText: {
     fontSize: 16,
-    color: '#fff', // Adjust text color for better contrast
-    flex: 1, // Ensures the text takes up available space
+    color: '#fff',
+    flex: 1,
   },
   completedTaskText: {
     textDecorationLine: 'line-through',
-    color: '#ddd', // Adjust text color for completed tasks
+    color: '#ddd',
   },
   editButton: {
-    backgroundColor: '#FFB347', // Light orange shade for edit button
+    backgroundColor: '#FFB347',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -404,10 +423,10 @@ const styles = StyleSheet.create({
   swipeActions: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 10, // Adds gap between the task container and the delete button
+    marginLeft: 10,
   },
   deleteButton: {
-    backgroundColor: '#FF6B6B', // Light red shade for delete button
+    backgroundColor: '#FF6B6B',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 8,
@@ -471,14 +490,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  highPriorityShade: {
-    backgroundColor: 'rgba(230, 57, 70, 0.1)', // Light red shade
-  },
-  mediumPriorityShade: {
-    backgroundColor: 'rgba(255, 165, 0, 0.1)', // Light orange shade
-  },
-  lowPriorityShade: {
-    backgroundColor: 'rgba(42, 157, 143, 0.1)', // Light green shade
-  },
 });
-
