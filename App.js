@@ -348,8 +348,9 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', // Align items in a row
+    alignItems: 'center', // Vertically center items
+    justifyContent: 'space-between', // Space between task text and buttons
     padding: 15,
     borderRadius: 12,
     marginBottom: 12,
@@ -367,6 +368,11 @@ const styles = StyleSheet.create({
   },
   lowPriorityBackground: {
     backgroundColor: '#2A9D8F', // Solid green for low priority
+  },
+  taskContent: {
+    flexDirection: 'row', // Ensure task number and text are in a row
+    alignItems: 'center',
+    flex: 1, // Take up available space
   },
   taskNumber: {
     fontSize: 16,
