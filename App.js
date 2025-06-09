@@ -1,29 +1,478 @@
-import * as Notifications from 'expo-notifications';
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  Animated,
+  Alert,
+  Modal,
+  Platform,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 
 export default function App() {
+  const [tasks, setTasks] = useState([]);
+  const [taskText, setTaskText] = useState('');
+  const [priority, setPriority] = useState('Medium');
+  const [priorityAnimation] = useState(new Animated.Value(1)); // Animation value
+  const [editTask, setEditTask] = useState(null);
+  const [isModalVisible, setModalVisible] = useState(false);
+
+  // Load tasks from AsyncStorage on app start
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  async function loadTasks() {
+    try {
+      const storedTasks = await AsyncStorage.getItem('tasks');
+      if (storedTasks) {
+        setTasks(JSON.parse(storedTasks));
+      }
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+    }
+  }
+
+  async function saveTasks(updatedTasks) {
+    try {
+      await AsyncStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    } catch (error) {
+      console.error('Failed to save tasks:', error);
+    }
+  }
+
+  // Handle adding a task
+  async function handleAddTask() {
+    if (!taskText.trim()) {
+      Alert.alert('Validation', 'Task cannot be empty.');
+      return;
+    }
+    const newTask = {
+      id: Date.now().toString(),
+      text: taskText,
+      priority,
+      completed: false,
+    };
+    const updatedTasks = [...tasks, newTask];
+    setTasks(updatedTasks);
+    setTaskText('');
+    await saveTasks(updatedTasks);
+  }
+
+  // Handle editing a task
+  async function handleEditTask() {
+    if (!taskText.trim()) {
+      Alert.alert('Validation', 'Task cannot be empty.');
+      return;
+    }
+    const updatedTasks = tasks.map((task) =>
+      task.id === editTask.id ? { ...task, text: taskText, priority } : task
+    );
+    setTasks(updatedTasks);
+    setEditTask(null);
+    setTaskText('');
+    setModalVisible(false);
+    await saveTasks(updatedTasks);
+  }
+
+  // Animate priority selection
+  function handlePrioritySelect(selectedPriority) {
+    setPriority(selectedPriority);
+    Animated.sequence([
+      Animated.timing(priorityAnimation, {
+        toValue: 1.2,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(priorityAnimation, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+
+  // Handle toggling task completion
+  async function toggleTaskCompletion(taskId) {
+    const updatedTasks = tasks.map((task) =>
+      task.id === taskId ? { ...task, completed: !task.completed } : task
+    );
+    setTasks(updatedTasks);
+    await saveTasks(updatedTasks);
+  }
+
+  // Handle deleting a task
+  async function handleDeleteTask(taskId) {
+    const updatedTasks = tasks.filter((task) => task.id !== taskId);
+    setTasks(updatedTasks);
+    await saveTasks(updatedTasks);
+  }
+
+  const renderItem = ({ item, index }) => (
+    <Swipeable
+      renderRightActions={() => (
+        <View style={styles.swipeActions}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteTask(item.id)}
+          >
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    >
+      <View
+        style={[
+          styles.taskItem,
+          item.priority === 'High' && styles.highPriorityBackground,
+          item.priority === 'Medium' && styles.mediumPriorityBackground,
+          item.priority === 'Low' && styles.lowPriorityBackground,
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.taskContent}
+          onPress={() => toggleTaskCompletion(item.id)} // Toggle completion on click
+        >
+          <Text style={styles.taskNumber}>{index + 1}.</Text>
+          <Text
+            style={[
+              styles.taskText,
+              item.completed && styles.completedTaskText, // Apply strikethrough if completed
+            ]}
+          >
+            {item.text}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => {
+            setEditTask(item);
+            setTaskText(item.text);
+            setPriority(item.priority);
+            setModalVisible(true); // Open modal for editing
+          }}
+        >
+          <Text style={styles.editButtonText}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+    </Swipeable>
+  );
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        {/* Header Row */}
+        <View style={styles.headerRow}>
+          <Text style={styles.header}>
+            {editTask ? 'Edit Task' : 'New Task'}
+          </Text>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={editTask ? handleEditTask : handleAddTask}
+          >
+            <Text style={styles.addButtonText}>
+              {editTask ? 'Save' : 'Add'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Task Input */}
+        <TextInput
+          style={styles.input}
+          placeholder="Task Title"
+          value={taskText}
+          onChangeText={setTaskText}
+        />
+
+        {/* Priority Row */}
+        <View style={styles.priorityRow}>
+          {['High', 'Medium', 'Low'].map((level) => (
+            <Animated.View
+              key={level}
+              style={[
+                styles.priorityButton,
+                styles[level.toLowerCase()],
+                { transform: [{ scale: priority === level ? priorityAnimation : 1 }] },
+              ]}
+            >
+              <TouchableOpacity onPress={() => handlePrioritySelect(level)}>
+                <Text style={styles.priorityText}>{level}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
+        </View>
+
+        {/* Task List Heading */}
+        <Text style={styles.taskListHeading}>Added Tasks</Text>
+
+        {/* Task List */}
+        <FlatList
+          data={tasks}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.taskList}
+        />
+
+        {/* Edit Modal */}
+        <Modal visible={isModalVisible} transparent animationType="slide">
+          <View style={styles.modalWrapper}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Edit Task</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Task Title"
+                value={taskText}
+                onChangeText={setTaskText}
+              />
+              <View style={styles.priorityRow}>
+                {['High', 'Medium', 'Low'].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[styles.priorityButton, styles[level.toLowerCase()]]}
+                    onPress={() => setPriority(level)}
+                  >
+                    <Text style={styles.priorityText}>{level}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.modalButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleEditTask}
+                >
+                  <Text style={styles.modalButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    paddingTop: Platform.OS === 'android' ? 50 : 40,
+    paddingHorizontal: 20,
+    backgroundColor: '#F4F6F8', // Soft grayish background
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  header: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#333',
+  },
+  addButton: {
+    backgroundColor: '#007BFF',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    shadowColor: '#007BFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  input: {
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    fontSize: 16,
+    marginBottom: 16,
+    shadowColor: '#ccc',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  priorityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  priorityButton: {
+    flex: 1,
+    marginHorizontal: 5,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  high: {
+    backgroundColor: '#E63946',
+  },
+  medium: {
+    backgroundColor: '#FFA500',
+  },
+  low: {
+    backgroundColor: '#2A9D8F',
+  },
+  priorityText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  taskListHeading: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 12,
+    color: '#222',
+  },
+  taskList: {
+    paddingBottom: 40,
+  },
+  taskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  highPriorityBackground: {
+    backgroundColor: '#E63946', // Solid red for high priority
+  },
+  mediumPriorityBackground: {
+    backgroundColor: '#FFA500', // Solid orange for medium priority
+  },
+  lowPriorityBackground: {
+    backgroundColor: '#2A9D8F', // Solid green for low priority
+  },
+  taskNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 8,
+    color: '#fff', // Adjust text color for better contrast
+  },
+  taskText: {
+    fontSize: 16,
+    color: '#fff', // Adjust text color for better contrast
+    flex: 1, // Ensures the text takes up available space
+  },
+  completedTaskText: {
+    textDecorationLine: 'line-through',
+    color: '#ddd', // Adjust text color for completed tasks
+  },
+  editButton: {
+    backgroundColor: '#FFB347', // Light orange shade for edit button
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  editButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  swipeActions: {
     justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10, // Adds gap between the task container and the delete button
+  },
+  deleteButton: {
+    backgroundColor: '#FF6B6B', // Light red shade for delete button
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  modalWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    width: '90%',
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderColor: '#ddd',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f9f9f9',
+    fontSize: 16,
+    marginBottom: 15,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    marginHorizontal: 5,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#E63946',
+  },
+  saveButton: {
+    backgroundColor: '#007BFF',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  highPriorityShade: {
+    backgroundColor: 'rgba(230, 57, 70, 0.1)', // Light red shade
+  },
+  mediumPriorityShade: {
+    backgroundColor: 'rgba(255, 165, 0, 0.1)', // Light orange shade
+  },
+  lowPriorityShade: {
+    backgroundColor: 'rgba(42, 157, 143, 0.1)', // Light green shade
   },
 });
+
