@@ -14,11 +14,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 
-export default function App() {
+export default function HomePage() {
   const [tasks, setTasks] = useState([]);
   const [taskText, setTaskText] = useState('');
   const [priority, setPriority] = useState('Medium');
-  const [priorityAnimation] = useState(new Animated.Value(1)); // Animation value
+  const [priorityAnimation] = useState(new Animated.Value(1));
   const [editTask, setEditTask] = useState(null);
   const [isModalVisible, setModalVisible] = useState(false);
 
@@ -75,7 +75,7 @@ export default function App() {
     );
     setTasks(updatedTasks);
     setEditTask(null);
-    setTaskText('');
+    setTaskText(''); // Clear the input field
     setModalVisible(false);
     await saveTasks(updatedTasks);
   }
@@ -169,14 +169,14 @@ export default function App() {
         {/* Header Row */}
         <View style={styles.headerRow}>
           <Text style={styles.header}>
-            {editTask ? 'Edit Task' : 'New Task'}
+            {'New Task'}
           </Text>
           <TouchableOpacity
             style={styles.addButton}
             onPress={editTask ? handleEditTask : handleAddTask}
           >
             <Text style={styles.addButtonText}>
-              {editTask ? 'Save' : 'Add'}
+              {'Add'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -185,7 +185,7 @@ export default function App() {
         <TextInput
           style={styles.input}
           placeholder="Task Title"
-          value={taskText}
+          value={editTask ? '' : taskText} // Clear input when editing
           onChangeText={setTaskText}
         />
 
