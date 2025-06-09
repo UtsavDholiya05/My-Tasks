@@ -34,6 +34,8 @@ export default function HomePage() {
   const [priorityAnimation] = useState(new Animated.Value(1));
   const [editTask, setEditTask] = useState(null);
   const [isModalVisible, setModalVisible] = useState(false);
+  const [addButtonAnim] = useState(new Animated.Value(1));
+
 
   // Request notification permissions & setup channel on mount
   useEffect(() => {
@@ -82,7 +84,7 @@ export default function HomePage() {
       content: {
         title: "Task Reminder",
         body: taskText
-          ? `Time to complete: ${taskText}`
+          ? `Priority: ${priority} - Time to complete: ${taskText}`
           : "This is a test notification.",
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -90,10 +92,6 @@ export default function HomePage() {
       },
       trigger: new Date(Date.now() + 10000), // 10 seconds from now
     });
-    // Alert.alert(
-    //   "Notification Scheduled",
-    //   "Check your notification in 10 seconds."
-    // );
   }
 
   // Handle adding a task
@@ -102,6 +100,21 @@ export default function HomePage() {
       Alert.alert("Validation", "Task cannot be empty.");
       return;
     }
+
+    // Animate the add button
+    Animated.sequence([
+      Animated.timing(addButtonAnim, {
+        toValue: 1.2,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(addButtonAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     const newTask = {
       id: Date.now().toString(),
       text: taskText,
@@ -226,7 +239,7 @@ export default function HomePage() {
             <TouchableOpacity
               style={[
                 styles.addButton,
-                { marginRight: 10 },
+                { marginRight: 10, transform: [{ scale: addButtonAnim }] },
                 !taskText.trim() && { backgroundColor: "#ccc" }, // greyed out when disabled
               ]}
               disabled={!taskText.trim()} // disables the button
@@ -325,9 +338,8 @@ export default function HomePage() {
   );
 }
 
-// Your existing styles here...
 const styles = StyleSheet.create({
-  // ... all your styles unchanged ...
+  
   container: {
     flex: 1,
     paddingTop: Platform.OS === "android" ? 50 : 40,
