@@ -10,6 +10,8 @@ import {
   Alert,
   Modal,
   Platform,
+  Dimensions,
+  StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -27,15 +29,22 @@ Notifications.setNotificationHandler({
   }),
 });
 
+const { width, height } = Dimensions.get("window");
+
 export default function HomePage() {
   const [tasks, setTasks] = useState([]);
   const [taskText, setTaskText] = useState("");
   const [priority, setPriority] = useState("Medium");
   const [priorityAnimation] = useState(new Animated.Value(1));
-  const [editTask, setEditTask] = useState(null);
+  const [editText, setEditText] = useState("");
   const [isModalVisible, setModalVisible] = useState(false);
   const [addButtonAnim] = useState(new Animated.Value(1));
-
+  // Add this line with your other state declarations at the top of your component
+const [editTask, setEditTask] = useState(null); // Add this line to define editTask state
+// Add this state for edit modal priority
+const [editPriority, setEditPriority] = useState("");
+// Add this state at the top with your other state declarations
+const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Request notification permissions & setup channel on mount
   useEffect(() => {
@@ -57,6 +66,12 @@ export default function HomePage() {
     }
     setupNotifications();
     loadTasks();
+
+    // Set status bar style explicitly
+    StatusBar.setBarStyle('dark-content');
+    if (Platform.OS === 'android') {
+      StatusBar.setBackgroundColor('#F8F9FA');
+    }
   }, []);
 
   async function loadTasks() {
@@ -127,16 +142,17 @@ export default function HomePage() {
 
   // Handle editing a task
   async function handleEditTask() {
-    if (!taskText.trim()) {
+    if (!editText.trim()) {
       Alert.alert("Validation", "Task cannot be empty.");
       return;
     }
     const updatedTasks = tasks.map((task) =>
-      task.id === editTask.id ? { ...task, text: taskText, priority } : task
+      task.id === editTask.id ? { ...task, text: editText, priority: editPriority } : task
     );
     setTasks(updatedTasks);
     setEditTask(null);
-    setTaskText("");
+    setEditText("");
+    setEditPriority("");
     setModalVisible(false);
     await saveTasks(updatedTasks);
   }
@@ -144,15 +160,23 @@ export default function HomePage() {
   // Animate priority selection
   function handlePrioritySelect(selectedPriority) {
     setPriority(selectedPriority);
+    
+    // Reset animation value to ensure consistent behavior
+    priorityAnimation.setValue(1);
+    
+    // Improved animation sequence
     Animated.sequence([
+      // Scale up more noticeably
       Animated.timing(priorityAnimation, {
-        toValue: 1.2,
-        duration: 300,
+        toValue: 1.15,
+        duration: 150,
         useNativeDriver: true,
       }),
-      Animated.timing(priorityAnimation, {
+      // Bounce back with slight overshoot
+      Animated.spring(priorityAnimation, {
         toValue: 1,
-        duration: 300,
+        friction: 5,
+        tension: 100,
         useNativeDriver: true,
       }),
     ]).start();
@@ -213,8 +237,8 @@ export default function HomePage() {
           style={styles.editButton}
           onPress={() => {
             setEditTask(item);
-            setTaskText(item.text);
-            setPriority(item.priority);
+            setEditText(item.text);
+            setEditPriority(item.priority); // Set edit priority separately
             setModalVisible(true);
           }}
         >
@@ -224,225 +248,340 @@ export default function HomePage() {
     </Swipeable>
   );
 
+  // Add this function to handle edit priority selection
+function handleEditPrioritySelect(selectedPriority) {
+  setEditPriority(selectedPriority);
+  
+  // Reset animation value to ensure consistent behavior
+  priorityAnimation.setValue(1);
+  
+  // Improved animation sequence for edit modal
+  Animated.sequence([
+    // Scale up more noticeably
+    Animated.timing(priorityAnimation, {
+      toValue: 1.15,
+      duration: 150,
+      useNativeDriver: true,
+    }),
+    // Bounce back with slight overshoot
+    Animated.spring(priorityAnimation, {
+      toValue: 1,
+      friction: 5,
+      tension: 100,
+      useNativeDriver: true,
+    }),
+  ]).start();
+}
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <StatusBar barStyle="dark-content"  backgroundColor="#F8F9FA" 
+      translucent={false}  />
       <View style={styles.container}>
-        {/* Header Row */}
+        {/* Header Row - Remove add button from here */}
         <View style={styles.headerRow}>
-          <Text style={styles.header}>
-            {editTask ? "Edit Task" : "New Task"}
-          </Text>
-
-          <View style={{ flexDirection: "row" }}>
-            <TouchableOpacity
-              style={[
-                styles.addButton,
-                { marginRight: 10, transform: [{ scale: addButtonAnim }] },
-                !taskText.trim() && { backgroundColor: "#ccc" }, // greyed out when disabled
-              ]}
-              disabled={!taskText.trim()} // disables the button
-              onPress={() => {
-                scheduleTestNotification();
-                handleAddTask();
-              }}
-            >
-              <Text style={styles.addButtonText}>{"Add"}</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.header}>{"My Tasks"}</Text>
         </View>
 
-        {/* Task Input */}
-        <TextInput
-          style={styles.input}
-          placeholder="Task Title"
-          value={taskText}
-          onChangeText={setTaskText}
-        />
+        {/* Task Input with Add button on right */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.inputWithButton}
+            placeholder="Task Title"
+            value={taskText}
+            onChangeText={setTaskText}
+          />
+          <TouchableOpacity
+            style={[
+              styles.addButton,
+              { transform: [{ scale: addButtonAnim }] },
+              !taskText.trim() && { backgroundColor: "#ccc" },
+            ]}
+            disabled={!taskText.trim()}
+            onPress={() => {
+              scheduleTestNotification();
+              handleAddTask();
+            }}
+          >
+            <Text style={styles.addButtonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Priority Row */}
         <View style={styles.priorityRow}>
           {["High", "Medium", "Low"].map((level) => (
-            <Animated.View
+            <TouchableOpacity
               key={level}
               style={[
                 styles.priorityButton,
                 styles[level.toLowerCase()],
-                {
-                  transform: [
-                    { scale: priority === level ? priorityAnimation : 1 },
-                  ],
-                },
+                priority === level && styles.selectedPriorityButton, 
+                priority !== level && styles.unselectedPriorityButton, // Apply unselected style
               ]}
+              onPress={() => handlePrioritySelect(level)}
+              activeOpacity={0.7}
             >
-              <TouchableOpacity onPress={() => handlePrioritySelect(level)}>
-                <Text style={styles.priorityText}>{level}</Text>
-              </TouchableOpacity>
-            </Animated.View>
+              <Text style={styles.priorityText}>
+                {level}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* Task List Heading */}
-        <Text style={styles.taskListHeading}>Added Tasks</Text>
+        {/* Task List Section */}
+        <View style={styles.taskListContainer}>
+          <Text style={styles.taskListHeading}>Added Tasks</Text>
+          <FlatList
+            data={tasks}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.taskList}
+          />
+        </View>
 
-        {/* Task List */}
-        <FlatList
-          data={tasks}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.taskList}
-        />
-
-        {/* Edit Modal */}
-        <Modal visible={isModalVisible} transparent animationType="slide">
-          <View style={styles.modalWrapper}>
-            <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>Edit Task</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Task Title"
-                value={taskText}
-                onChangeText={setTaskText}
-              />
-              <View style={styles.priorityRow}>
-                {["High", "Medium", "Low"].map((level) => (
-                  <TouchableOpacity
-                    key={level}
-                    style={[styles.priorityButton, styles[level.toLowerCase()]]}
-                    onPress={() => setPriority(level)}
-                  >
-                    <Text style={styles.priorityText}>{level}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text style={styles.modalButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.saveButton]}
-                  onPress={handleEditTask}
-                >
-                  <Text style={styles.modalButtonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        {/* Edit Modal with improved background blur */}
+        <Modal 
+  visible={isModalVisible} 
+  transparent 
+  animationType="slide"
+>
+  <View style={styles.modalWrapper}>
+    <View style={styles.modalContainer}>
+      <Text style={styles.modalTitle}>Edit Task</Text>
+      <TextInput
+        style={styles.modalInput}
+        placeholder="Task Title"
+        value={editText}
+        onChangeText={setEditText}
+      />
+      {/* Update the Edit Modal priority buttons */}
+      <View style={styles.priorityRow}>
+        {["High", "Medium", "Low"].map((level) => (
+          <TouchableOpacity
+            key={level}
+            style={[
+              styles.priorityButton,
+              styles[level.toLowerCase()],
+              editPriority === level && styles.selectedPriorityButton,
+              editPriority !== level && styles.unselectedPriorityButton,
+            ]}
+            onPress={() => handleEditPrioritySelect(level)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.priorityText}>
+              {level}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.modalActions}>
+        <TouchableOpacity
+          style={[styles.modalButton, styles.cancelButton]}
+          onPress={() => {
+            setModalVisible(false);
+            setEditTask(null);
+          }}
+        >
+          <Text style={styles.modalButtonText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modalButton, styles.saveButton]}
+          onPress={() => handleEditTask()}
+        >
+          <Text style={styles.modalButtonText}>Save</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
       </View>
     </GestureHandlerRootView>
   );
 }
 
+// Updated styles for a more clean and professional UI
 const styles = StyleSheet.create({
-  
+  // Main Container
   container: {
     flex: 1,
-    paddingTop: Platform.OS === "android" ? 50 : 40,
-    paddingHorizontal: 20,
-    backgroundColor: "#F4F6F8",
+    paddingTop: Platform.OS === "android" ? height * 0.07 : height * 0.06, // Increased from 0.05/0.04
+    paddingHorizontal: width * 0.05,
+    backgroundColor: "#F8F9FA", // Light background
   },
+
+  // Header Section
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center", // Center the title
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: height * 0.025,
+    paddingVertical: height * 0.02,
+    paddingHorizontal: width * 0.04,
+    backgroundColor: "#FFFFFF",
+    borderRadius: width * 0.03,
+    borderLeftWidth: 4,
+    borderLeftColor: "#007BFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+    position: "relative", // For absolute positioning of the Add button
   },
   header: {
-    fontSize: 26,
+    fontSize: width * 0.065,
     fontWeight: "700",
-    color: "#333",
+    color: "#2C3E50",
+    textAlign: "center", // Center-align the text
   },
   addButton: {
     backgroundColor: "#007BFF",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    shadowColor: "#007BFF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    paddingVertical: height * 0.015,
+    paddingHorizontal: width * 0.05,
+    borderRadius: width * 0.03,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   addButtonText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 16,
+    fontSize: width * 0.042,
   },
+
+  // Input Section
   input: {
-    borderColor: "#ccc",
+    borderColor: "#E0E0E0",
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    borderRadius: width * 0.03,
+    paddingHorizontal: width * 0.04,
+    paddingVertical: height * 0.018,
     backgroundColor: "#fff",
-    fontSize: 16,
-    marginBottom: 16,
+    fontSize: width * 0.045,
+    marginBottom: height * 0.025,
+    color: "#555",
     shadowColor: "#ccc",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
   },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: height * 0.025,
+  },
+  inputWithButton: {
+    flex: 1,
+    borderColor: "#E0E0E0",
+    borderWidth: 1,
+    borderRadius: width * 0.03,
+    paddingHorizontal: width * 0.04,
+    paddingVertical: height * 0.018,
+    backgroundColor: "#fff",
+    fontSize: width * 0.045,
+    color: "#555",
+    marginRight: width * 0.02,
+  },
+
+  // Priority Selection Section
   priorityRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: height * 0.025,
+    backgroundColor: "#FFFFFF",
+    padding: width * 0.03,
+    borderRadius: width * 0.03,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   priorityButton: {
     flex: 1,
-    marginHorizontal: 5,
-    paddingVertical: 10,
-    borderRadius: 10,
+    marginHorizontal: width * 0.015,
+    paddingVertical: height * 0.018,
+    borderRadius: width * 0.03,
     alignItems: "center",
+    justifyContent: "center", // Add this to center text vertically
     elevation: 2,
   },
   high: {
-    backgroundColor: "#E63946",
+    backgroundColor: "#E53935", // Red for high priority
   },
   medium: {
-    backgroundColor: "#FFA500",
+    backgroundColor: "#FF9800", // Orange for medium priority
   },
   low: {
-    backgroundColor: "#2A9D8F",
+    backgroundColor: "#00897B", // Teal for low priority
   },
   priorityText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: width * 0.042,
+    textAlign: "center", // Add this to ensure text is centered horizontally
+  },
+
+  // Task List Section
+  taskListContainer: {
+    flex: 0.93,
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: width * 0.03,
+    borderTopWidth: 4,
+    borderTopColor: "#3F51B5", // Blue for task list header
+    marginTop: height * 0.025,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    overflow: "hidden", // This prevents content from spilling outside rounded corners
   },
   taskListHeading: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 12,
-    color: "#222",
+    fontSize: width * 0.055,
+    fontWeight: "700",
+    marginBottom: height * 0.02,
+    color: "#2C3E50",
+    paddingBottom: height * 0.015,
+    paddingHorizontal: width * 0.04,
+    paddingTop: height * 0.02,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ECEFF1",
   },
   taskList: {
-    paddingBottom: 40,
+    paddingHorizontal: width * 0.04,
+    paddingBottom: height * 0.05, // Add extra space at the bottom for better scrolling
   },
+
+  // Individual Task Items
   taskItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: width * 0.04,
+    borderRadius: width * 0.025,
+    marginBottom: height * 0.015,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 2,
+    elevation: 2,
+    borderLeftWidth: 4, // Left border indicator
   },
   highPriorityBackground: {
-    backgroundColor: "#E63946",
+    backgroundColor: "#FFF8F8", // Light red background
+    borderLeftColor: "#E53935", // Red left border
   },
   mediumPriorityBackground: {
-    backgroundColor: "#FFA500",
+    backgroundColor: "#FFF3E0", // Light orange background
+    borderLeftColor: "#FF9800", // Orange left border
   },
   lowPriorityBackground: {
-    backgroundColor: "#2A9D8F",
+    backgroundColor: "#E0F2F1", // Light teal background
+    borderLeftColor: "#00897B", // Teal left border
   },
   taskContent: {
     flexDirection: "row",
@@ -450,109 +589,130 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taskNumber: {
-    fontSize: 16,
+    fontSize: width * 0.045,
     fontWeight: "600",
-    marginRight: 8,
-    color: "#fff",
+    marginRight: width * 0.035,
+    color: "#546E7A", // Dark blue-gray
   },
   taskText: {
-    fontSize: 16,
-    color: "#fff",
+    fontSize: width * 0.045,
+    color: "#37474F", // Dark gray
     flex: 1,
   },
   completedTaskText: {
     textDecorationLine: "line-through",
-    color: "#ddd",
+    color: "#9E9E9E", // Medium gray
   },
+
+  // Task Action Buttons
   editButton: {
-    backgroundColor: "#FFB347",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: "#007BFF", // Blue edit button
+    paddingVertical: height * 0.01,
+    paddingHorizontal: width * 0.04,
+    borderRadius: width * 0.02,
     elevation: 2,
+    alignSelf: "flex-end", // Ensure it stays on the right
   },
   editButtonText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: width * 0.038,
   },
   swipeActions: {
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 10,
+    justifyContent: "row",
+    alignItems: "row",
+    paddingHorizontal: width * 0.02,
   },
   deleteButton: {
-    backgroundColor: "#FF6B6B",
+    backgroundColor: "#F44336", // Red delete button
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: height * 0.02,
+    paddingHorizontal: width * 0.04,
+    borderRadius: width * 0.02,
     elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    height: "83%",
+    width: width * 0.2,
   },
   deleteButtonText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: width * 0.04,
   },
+
+  // Modal Styles
   modalWrapper: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.95)", // Change from 1 to 0.6 for blur effect
   },
   modalContainer: {
     width: "90%",
     backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
+    padding: width * 0.05,
+    borderRadius: width * 0.03,
     elevation: 5,
+    borderTopWidth: 4,
+    borderTopColor: "#007BFF",
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: width * 0.055,
     fontWeight: "bold",
-    marginBottom: 15,
+    marginBottom: height * 0.025,
     textAlign: "center",
+    color: "#2C3E50",
   },
   modalInput: {
-    borderColor: "#ddd",
+    borderColor: "#E0E0E0",
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "#f9f9f9",
-    fontSize: 16,
-    marginBottom: 15,
+    borderRadius: width * 0.03,
+    paddingHorizontal: width * 0.04,
+    paddingVertical: height * 0.018,
+    backgroundColor: "#F5F5F5",
+    fontSize: width * 0.045,
+    marginBottom: height * 0.025,
   },
   modalActions: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginTop: height * 0.01,
   },
   modalButton: {
     flex: 1,
-    marginHorizontal: 5,
-    paddingVertical: 10,
-    borderRadius: 8,
+    marginHorizontal: width * 0.015,
+    paddingVertical: height * 0.018,
+    borderRadius: width * 0.03,
     alignItems: "center",
   },
   cancelButton: {
-    backgroundColor: "#E63946",
+    backgroundColor: "#757575", // Dark gray cancel button instead of red
   },
   saveButton: {
-    backgroundColor: "#007BFF",
+    backgroundColor: "#007BFF", // Blue save button
   },
   modalButtonText: {
     color: "#fff",
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: width * 0.042,
   },
-  highPriorityShade: {
-    backgroundColor: "rgba(230, 57, 70, 0.1)",
+  selectedPriorityButton: {
+    borderWidth: 3, // Thick border
+    borderColor: '#FFFFFF', // White border
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5, // Increased opacity for more noticeable shadow
+    shadowRadius: 5,
+    elevation: 10, // Higher elevation for better pop effect
+    transform: [{ scale: 1.1 }], // Make selected button slightly larger
   },
-  mediumPriorityShade: {
-    backgroundColor: "rgba(255, 165, 0, 0.1)",
-  },
-  lowPriorityShade: {
-    backgroundColor: "rgba(42, 157, 143, 0.1)",
+  unselectedPriorityButton: {
+    transform: [{ scale: 0.85 }], // Make unselected buttons significantly smaller (changed from 0.95)
+    opacity: 0.75, // Further reduce opacity for better contrast (changed from 0.85)
+    elevation: 1, // Reduce elevation to make it appear less prominent
   },
 });
