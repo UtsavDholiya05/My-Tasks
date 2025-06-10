@@ -41,7 +41,7 @@ git clone https://github.com/Utsoliya05/My-Tasks.git
 cd My-Tasks
 
 2.Install dependencies
-npm install
+  npm install
 # or
 yarn install
 
@@ -85,15 +85,15 @@ Notification System
 Notifications are scheduled using Expo's notification API with a 10-second delay for demonstration purposes. In a production app, this would be configured with more practical timing options.
 
 UI/UX Considerations
--Responsive Design: All UI elements scale appropriately based on device dimensions
--Color Coding: Different colors for priority levels make task importance instantly recognizable
--Swipe Actions: Intuitive gesture-based interactions for common functions
+- Responsive Design: All UI elements scale appropriately based on device dimensions
+- Color Coding: Different colors for priority levels make task importance instantly recognizable
+- Swipe Actions: Intuitive gesture-based interactions for common functions
 
 Future Enhancements
--Task categories and labels
--Due dates with calendar integration
--Recurring tasks
--Search and filtering capabilities
--Cloud synchronization
--Task sharing and collaboration
--Analytics dashboard for task completion metrics
+- Task categories and labels
+- Due dates with calendar integration
+- Recurring tasks
+- Search and filtering capabilities
+- Cloud synchronization
+- Task sharing and collaboration
+- Analytics dashboard for task completion metrics
