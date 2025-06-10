@@ -20,7 +20,7 @@ import {
 } from "react-native-gesture-handler";
 import * as Notifications from "expo-notifications";
 
-// Configure notification handling behavior (optional)
+// Configure notification handling
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -32,6 +32,7 @@ Notifications.setNotificationHandler({
 const { width, height } = Dimensions.get("window");
 
 export default function HomePage() {
+  // State management
   const [tasks, setTasks] = useState([]);
   const [taskText, setTaskText] = useState("");
   const [priority, setPriority] = useState("Medium");
@@ -39,16 +40,14 @@ export default function HomePage() {
   const [editText, setEditText] = useState("");
   const [isModalVisible, setModalVisible] = useState(false);
   const [addButtonAnim] = useState(new Animated.Value(1));
-  // Add this line with your other state declarations at the top of your component
-  const [editTask, setEditTask] = useState(null); // Add this line to define editTask state
-  // Add this state for edit modal priority
+  const [editTask, setEditTask] = useState(null);
   const [editPriority, setEditPriority] = useState("");
-  // Add this state at the top with your other state declarations
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Request notification permissions & setup channel on mount
+  // Initialize app with notifications and load data
   useEffect(() => {
     async function setupNotifications() {
+      // Set up notification channel for Android
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("default", {
           name: "default",
@@ -56,6 +55,8 @@ export default function HomePage() {
           sound: "default",
         });
       }
+      
+      // Request notification permissions
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
@@ -64,17 +65,21 @@ export default function HomePage() {
         );
       }
     }
+    
     setupNotifications();
     loadTasks();
-
-    // Set status bar style explicitly
-    StatusBar.setBarStyle("dark-content");
-    if (Platform.OS === "android") {
-      StatusBar.setBackgroundColor("#F8F9FA");
-    }
   }, []);
 
-  // Load dark mode preference
+  // Update status bar when dark mode changes
+  useEffect(() => {
+    // Set status bar style based on dark mode
+    StatusBar.setBarStyle(isDarkMode ? "light-content" : "dark-content");
+    if (Platform.OS === "android") {
+      StatusBar.setBackgroundColor(isDarkMode ? "#121212" : "#F8F9FA");
+    }
+  }, [isDarkMode]);
+
+  // Load dark mode preference from storage
   useEffect(() => {
     async function loadDarkModePreference() {
       try {
@@ -88,9 +93,37 @@ export default function HomePage() {
     }
     
     loadDarkModePreference();
-    // Other existing useEffect code...
   }, []);
 
+  // Handle notifications for deleted tasks
+  useEffect(() => {
+    // Add notification received listener for catching notifications for deleted tasks
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      try {
+        // Get the taskId directly from the notification identifier
+        const notificationId = notification.request.identifier;
+        
+        console.log(`Notification received with ID: ${notificationId}`);
+        
+        // Check if the task still exists by checking if this ID exists in tasks
+        const taskExists = tasks.some(task => task.id === notificationId);
+        
+        if (!taskExists) {
+          console.log(`Task ${notificationId} no longer exists, dismissing notification`);
+          Notifications.dismissNotificationAsync(notificationId);
+        }
+      } catch (error) {
+        console.error("Error handling notification:", error);
+      }
+    });
+    
+    return () => {
+      // Clean up subscription
+      notificationListener.remove();
+    };
+  }, [tasks]);
+
+  // Load tasks from storage
   async function loadTasks() {
     try {
       const storedTasks = await AsyncStorage.getItem("tasks");
@@ -102,6 +135,7 @@ export default function HomePage() {
     }
   }
 
+  // Save tasks to storage
   async function saveTasks(updatedTasks) {
     try {
       await AsyncStorage.setItem("tasks", JSON.stringify(updatedTasks));
@@ -110,7 +144,7 @@ export default function HomePage() {
     }
   }
 
-  // Handle adding a task
+  // Add a new task
   async function handleAddTask() {
     if (!taskText.trim()) {
       Alert.alert("Validation", "Task cannot be empty.");
@@ -131,13 +165,13 @@ export default function HomePage() {
       }),
     ]).start();
 
-    // Generate ID first before ANY other operations
+    // Generate ID first before any other operations
     const taskId = Date.now().toString();
     
-    // Schedule notification using EXACTLY this ID - only do this once!
+    // Schedule notification using the task ID
     const notificationId = await scheduleTaskNotification(taskText, priority, taskId);
 
-    // Create task with the SAME ID
+    // Create task with the same ID
     const newTask = {
       id: taskId,
       text: taskText,
@@ -152,10 +186,10 @@ export default function HomePage() {
     await saveTasks(updatedTasks);
   }
 
-  // Updated scheduleTaskNotification function
+  // Schedule a notification for a task
   async function scheduleTaskNotification(text, priority, taskId) {
     try {
-      // Important: This ensures the EXACT same ID is used everywhere
+      // Use the task ID as the notification identifier
       const notificationIdentifier = taskId;
       
       // Schedule notification
@@ -180,7 +214,7 @@ export default function HomePage() {
     }
   }
 
-  // Handle editing a task
+  // Edit an existing task
   async function handleEditTask() {
     if (!editText.trim()) {
       Alert.alert("Validation", "Task cannot be empty.");
@@ -191,7 +225,7 @@ export default function HomePage() {
       // Find the task to get its notification ID
       const taskToEdit = tasks.find(task => task.id === editTask.id);
       
-      // Cancel the existing notification using the task ID (which is the same as notification ID)
+      // Cancel the existing notification
       if (taskToEdit) {
         try {
           await Notifications.cancelScheduledNotificationAsync(taskToEdit.id);
@@ -201,11 +235,11 @@ export default function HomePage() {
         }
       }
       
-      // Schedule a new notification - passing the SAME task ID
+      // Schedule a new notification using the same task ID
       const notificationId = await scheduleTaskNotification(
         editText,
         editPriority,
-        editTask.id // Use the existing task ID to keep consistency
+        editTask.id
       );
       
       // Update the task
@@ -214,10 +248,11 @@ export default function HomePage() {
           ...task,
           text: editText,
           priority: editPriority,
-          notificationId: notificationId // This should be the same as task.id now
+          notificationId: notificationId
         } : task
       );
       
+      // Update state and storage
       setTasks(updatedTasks);
       setEditTask(null);
       setEditText("");
@@ -229,22 +264,22 @@ export default function HomePage() {
     }
   }
 
-  // Animate priority selection
+  // Animate priority selection in main screen
   function handlePrioritySelect(selectedPriority) {
     setPriority(selectedPriority);
 
-    // Reset animation value to ensure consistent behavior
+    // Reset animation value for consistent behavior
     priorityAnimation.setValue(1);
 
-    // Improved animation sequence
+    // Animated sequence for button scaling
     Animated.sequence([
-      // Scale up more noticeably
+      // Scale up
       Animated.timing(priorityAnimation, {
         toValue: 1.15,
         duration: 150,
         useNativeDriver: true,
       }),
-      // Bounce back with slight overshoot
+      // Bounce back with spring effect
       Animated.spring(priorityAnimation, {
         toValue: 1,
         friction: 5,
@@ -254,7 +289,28 @@ export default function HomePage() {
     ]).start();
   }
 
-  // Toggle task completion
+  // Handle priority selection in edit modal
+  function handleEditPrioritySelect(selectedPriority) {
+    setEditPriority(selectedPriority);
+
+    // Same animation as main screen
+    priorityAnimation.setValue(1);
+    Animated.sequence([
+      Animated.timing(priorityAnimation, {
+        toValue: 1.15,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.spring(priorityAnimation, {
+        toValue: 1,
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+
+  // Toggle task completion status
   async function toggleTaskCompletion(taskId) {
     const updatedTasks = tasks.map((task) =>
       task.id === taskId ? { ...task, completed: !task.completed } : task
@@ -263,20 +319,18 @@ export default function HomePage() {
     await saveTasks(updatedTasks);
   }
 
-  // Delete a task
+  // Delete a task and its notification
   async function handleDeleteTask(taskId) {
     try {
-      // Find the task to get its notification ID and identifier
+      // Find the task to get its notification identifier
       const taskToDelete = tasks.find(task => task.id === taskId);
       
       if (taskToDelete) {
-        // Use the task ID itself as the notification identifier (matching how it's created)
+        // Cancel the notification
         const notificationIdentifier = taskId;
-        
-        // Cancel using both methods to ensure it's completely stopped
         await Notifications.cancelScheduledNotificationAsync(notificationIdentifier);
         
-        // For Android, try dismissing any already shown notifications
+        // For Android, also dismiss any shown notifications
         if (Platform.OS === 'android') {
           try {
             await Notifications.dismissNotificationAsync(notificationIdentifier);
@@ -301,6 +355,19 @@ export default function HomePage() {
     }
   }
 
+  // Toggle between dark and light mode
+  async function toggleDarkMode() {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    
+    try {
+      await AsyncStorage.setItem('darkMode', String(newMode));
+    } catch (error) {
+      console.error('Failed to save dark mode preference:', error);
+    }
+  }
+
+  // Render individual task items
   const renderItem = ({ item, index }) => (
     <Swipeable
       renderRightActions={() => (
@@ -323,7 +390,6 @@ export default function HomePage() {
           item.priority === "Low" && (isDarkMode ? styles.darkLowPriority : styles.lowPriorityBackground),
         ]}
       >
-        {/* Task content */}
         <TouchableOpacity style={styles.taskContent} onPress={() => toggleTaskCompletion(item.id)}>
           <Text style={[
             styles.taskNumber,
@@ -339,13 +405,12 @@ export default function HomePage() {
             {item.text}
           </Text>
         </TouchableOpacity>
-        {/* Edit button */}
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => {
             setEditTask(item);
             setEditText(item.text);
-            setEditPriority(item.priority); // Set edit priority separately
+            setEditPriority(item.priority);
             setModalVisible(true);
           }}
         >
@@ -355,82 +420,17 @@ export default function HomePage() {
     </Swipeable>
   );
 
-  // Add this function to handle edit priority selection
-  function handleEditPrioritySelect(selectedPriority) {
-    setEditPriority(selectedPriority);
-
-    // Reset animation value to ensure consistent behavior
-    priorityAnimation.setValue(1);
-
-    // Improved animation sequence for edit modal
-    Animated.sequence([
-      // Scale up more noticeably
-      Animated.timing(priorityAnimation, {
-        toValue: 1.15,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      // Bounce back with slight overshoot
-      Animated.spring(priorityAnimation, {
-        toValue: 1,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-
-  // Update function to toggle and save dark mode
-  async function toggleDarkMode() {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    
-    try {
-      await AsyncStorage.setItem('darkMode', String(newMode));
-    } catch (error) {
-      console.error('Failed to save dark mode preference:', error);
-    }
-  }
-
-  // Add this to your useEffect
-  useEffect(() => {
-    // Your existing code...
-    
-    // Add notification received listener for debugging
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      try {
-        // Get the taskId directly from the notification identifier
-        const notificationId = notification.request.identifier;
-        
-        console.log(`Notification received with ID: ${notificationId}`);
-        
-        // Check if the task still exists by checking if this ID exists in tasks
-        const taskExists = tasks.some(task => task.id === notificationId);
-        
-        if (!taskExists) {
-          console.log(`Task ${notificationId} no longer exists, dismissing notification`);
-          Notifications.dismissNotificationAsync(notificationId);
-        }
-      } catch (error) {
-        console.error("Error handling notification:", error);
-      }
-    });
-    
-    return () => {
-      // Your existing cleanup code...
-      notificationListener.remove();
-    };
-  }, [tasks]);
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Status Bar configuration for both light and dark modes */}
       <StatusBar
-        bbarStyle={isDarkMode ? "light-content" : "dark-content"}
+        barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={isDarkMode ? "#121212" : "#F8F9FA"}
         translucent={false}
       />
+      
       <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-        {/* Header Row - Remove add button from here */}
+        {/* App Header with Dark Mode Toggle */}
         <View style={[styles.headerRow, isDarkMode && styles.darkHeaderRow]}>
           <Text style={[styles.header, isDarkMode && styles.darkHeader]}>
             {"My Tasks"}
@@ -438,7 +438,7 @@ export default function HomePage() {
 
           <TouchableOpacity
             style={styles.darkModeToggle}
-            onPress={() => setIsDarkMode((prev) => !prev)}
+            onPress={toggleDarkMode}
           >
             <Text style={styles.darkModeToggleText}>
               {isDarkMode ? "☀️" : "🌙"}
@@ -446,7 +446,7 @@ export default function HomePage() {
           </TouchableOpacity>
         </View>
 
-        {/* Task Input with Add button on right */}
+        {/* Task Input with Add Button */}
         <View
           style={[
             styles.inputContainer,
@@ -467,19 +467,14 @@ export default function HomePage() {
               !taskText.trim() && { backgroundColor: "#ccc" },
             ]}
             disabled={!taskText.trim()}
-            onPress={() => {
-              handleAddTask();
-            }}
+            onPress={handleAddTask}
           >
             <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Priority Row */}
-        <View style={[
-  styles.priorityRow,
-  isDarkMode && styles.darkPriorityRow
-]}>
+        {/* Priority Selection Buttons */}
+        <View style={[styles.priorityRow, isDarkMode && styles.darkPriorityRow]}>
           {["High", "Medium", "Low"].map((level) => (
             <TouchableOpacity
               key={level}
@@ -487,7 +482,7 @@ export default function HomePage() {
                 styles.priorityButton,
                 styles[level.toLowerCase()],
                 priority === level && styles.selectedPriorityButton,
-                priority !== level && styles.unselectedPriorityButton, // Apply unselected style
+                priority !== level && styles.unselectedPriorityButton,
               ]}
               onPress={() => handlePrioritySelect(level)}
               activeOpacity={0.7}
@@ -498,14 +493,10 @@ export default function HomePage() {
         </View>
 
         {/* Task List Section */}
-        <View style={[
-  styles.taskListContainer,
-  isDarkMode && styles.darkTaskListContainer
-]}>
-          <Text style={[
-    styles.taskListHeading,
-    isDarkMode && styles.darkTaskListHeading
-  ]}>Added Tasks</Text>
+        <View style={[styles.taskListContainer, isDarkMode && styles.darkTaskListContainer]}>
+          <Text style={[styles.taskListHeading, isDarkMode && styles.darkTaskListHeading]}>
+            Added Tasks
+          </Text>
           <FlatList
             data={tasks}
             keyExtractor={(item) => item.id}
@@ -514,32 +505,23 @@ export default function HomePage() {
           />
         </View>
 
-        {/* Edit Modal with improved background blur */}
+        {/* Edit Task Modal */}
         <Modal visible={isModalVisible} transparent animationType="slide">
-          <View style={[
-            styles.modalWrapper,
-            isDarkMode && styles.darkModalWrapper
-          ]}>
-            <View style={[
-              styles.modalContainer,
-              isDarkMode && styles.darkModalContainer
-            ]}>
-              <Text style={[
-                styles.modalTitle,
-                isDarkMode && styles.darkModalTitle
-              ]}>Edit Task</Text>
+          <View style={[styles.modalWrapper, isDarkMode && styles.darkModalWrapper]}>
+            <View style={[styles.modalContainer, isDarkMode && styles.darkModalContainer]}>
+              <Text style={[styles.modalTitle, isDarkMode && styles.darkModalTitle]}>
+                Edit Task
+              </Text>
               <TextInput
-                style={[
-                  styles.modalInput,
-                  isDarkMode && styles.darkModalInput
-                ]}
+                style={[styles.modalInput, isDarkMode && styles.darkModalInput]}
                 placeholder="Task Title"
                 placeholderTextColor={isDarkMode ? "#888" : "#999"}
                 value={editText}
                 onChangeText={setEditText}
               />
-              {/* Update the Edit Modal priority buttons */}
-              <View style={styles.priorityRow}>
+              
+              {/* Edit Modal Priority Selection */}
+              <View style={[styles.priorityRow, isDarkMode && styles.darkPriorityRow]}>
                 {["High", "Medium", "Low"].map((level) => (
                   <TouchableOpacity
                     key={level}
@@ -556,6 +538,8 @@ export default function HomePage() {
                   </TouchableOpacity>
                 ))}
               </View>
+              
+              {/* Modal Action Buttons */}
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
@@ -568,7 +552,7 @@ export default function HomePage() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.saveButton]}
-                  onPress={() => handleEditTask()}
+                  onPress={handleEditTask}
                 >
                   <Text style={styles.modalButtonText}>Save</Text>
                 </TouchableOpacity>
@@ -581,12 +565,12 @@ export default function HomePage() {
   );
 }
 
-// Updated styles for a more clean and professional UI
+// Styles for the app
 const styles = StyleSheet.create({
   // Main Container
   container: {
     flex: 1,
-    paddingTop: Platform.OS === "android" ? height * 0.07 : height * 0.06, // Increased from 0.05/0.04
+    paddingTop: Platform.OS === "android" ? height * 0.07 : height * 0.06,
     paddingHorizontal: width * 0.05,
     backgroundColor: "#F8F9FA", // Light background
   },
@@ -594,7 +578,7 @@ const styles = StyleSheet.create({
   // Header Section
   headerRow: {
     flexDirection: "row",
-    justifyContent: "center", // Center the title
+    justifyContent: "center",
     alignItems: "center",
     marginBottom: height * 0.025,
     paddingVertical: height * 0.02,
@@ -608,47 +592,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 2,
-    position: "relative", // For absolute positioning of the Add button
+    position: "relative",
   },
   header: {
     fontSize: width * 0.065,
     fontWeight: "700",
     color: "#2C3E50",
-    textAlign: "center", // Center-align the text
+    textAlign: "center",
   },
-  addButton: {
-    backgroundColor: "#007BFF",
-    paddingVertical: height * 0.015,
-    paddingHorizontal: width * 0.05,
-    borderRadius: width * 0.03,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+  
+  // Dark Mode Toggle Button
+  darkModeToggle: {
+    position: "absolute",
+    right: width * 0.04,
+    padding: width * 0.02,
+    borderRadius: width * 0.02,
   },
-  addButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: width * 0.042,
+  darkModeToggleText: {
+    fontSize: width * 0.06,
   },
 
   // Input Section
-  input: {
-    borderColor: "#E0E0E0",
-    borderWidth: 1,
-    borderRadius: width * 0.03,
-    paddingHorizontal: width * 0.04,
-    paddingVertical: height * 0.018,
-    backgroundColor: "#fff",
-    fontSize: width * 0.045,
-    marginBottom: height * 0.025,
-    color: "#555",
-    shadowColor: "#ccc",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -665,6 +629,22 @@ const styles = StyleSheet.create({
     fontSize: width * 0.045,
     color: "#555",
     marginRight: width * 0.02,
+  },
+  addButton: {
+    backgroundColor: "#007BFF",
+    paddingVertical: height * 0.015,
+    paddingHorizontal: width * 0.05,
+    borderRadius: width * 0.03,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  addButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: width * 0.042,
   },
 
   // Priority Selection Section
@@ -687,7 +667,7 @@ const styles = StyleSheet.create({
     paddingVertical: height * 0.018,
     borderRadius: width * 0.03,
     alignItems: "center",
-    justifyContent: "center", // Add this to center text vertically
+    justifyContent: "center",
     elevation: 2,
   },
   high: {
@@ -703,24 +683,39 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: width * 0.042,
-    textAlign: "center", // Add this to ensure text is centered horizontally
+    textAlign: "center",
+  },
+  selectedPriorityButton: {
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 10,
+    transform: [{ scale: 1.1 }],
+  },
+  unselectedPriorityButton: {
+    transform: [{ scale: 0.75 }],
+    opacity: 0.65,
+    elevation: 1,
   },
 
   // Task List Section
   taskListContainer: {
-    flex: 0.93,
+    flex: 1,
     width: "100%",
     backgroundColor: "#FFFFFF",
     borderRadius: width * 0.03,
     borderTopWidth: 4,
-    borderTopColor: "#3F51B5", // Blue for task list header
+    borderTopColor: "#3F51B5",
     marginTop: height * 0.025,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
-    overflow: "hidden", // This prevents content from spilling outside rounded corners
+    overflow: "hidden",
   },
   taskListHeading: {
     fontSize: width * 0.055,
@@ -735,7 +730,7 @@ const styles = StyleSheet.create({
   },
   taskList: {
     paddingHorizontal: width * 0.04,
-    paddingBottom: height * 0.05, // Add extra space at the bottom for better scrolling
+    paddingBottom: height * 0.05,
   },
 
   // Individual Task Items
@@ -751,19 +746,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-    borderLeftWidth: 4, // Left border indicator
+    borderLeftWidth: 4,
   },
   highPriorityBackground: {
-    backgroundColor: "#FFF8F8", // Light red background
-    borderLeftColor: "#E53935", // Red left border
+    backgroundColor: "#FFF8F8",
+    borderLeftColor: "#E53935",
   },
   mediumPriorityBackground: {
-    backgroundColor: "#FFF3E0", // Light orange background
-    borderLeftColor: "#FF9800", // Orange left border
+    backgroundColor: "#FFF3E0",
+    borderLeftColor: "#FF9800",
   },
   lowPriorityBackground: {
-    backgroundColor: "#E0F2F1", // Light teal background
-    borderLeftColor: "#00897B", // Teal left border
+    backgroundColor: "#E0F2F1",
+    borderLeftColor: "#00897B",
   },
   taskContent: {
     flexDirection: "row",
@@ -774,26 +769,26 @@ const styles = StyleSheet.create({
     fontSize: width * 0.045,
     fontWeight: "600",
     marginRight: width * 0.035,
-    color: "#546E7A", // Dark blue-gray
+    color: "#546E7A",
   },
   taskText: {
     fontSize: width * 0.045,
-    color: "#37474F", // Dark gray
+    color: "#37474F",
     flex: 1,
   },
   completedTaskText: {
     textDecorationLine: "line-through",
-    color: "#9E9E9E", // Medium gray
+    color: "#9E9E9E",
   },
 
   // Task Action Buttons
   editButton: {
-    backgroundColor: "#007BFF", // Blue edit button
+    backgroundColor: "#007BFF",
     paddingVertical: height * 0.01,
     paddingHorizontal: width * 0.04,
     borderRadius: width * 0.02,
     elevation: 2,
-    alignSelf: "flex-end", // Ensure it stays on the right
+    alignSelf: "flex-end",
   },
   editButtonText: {
     color: "#fff",
@@ -802,11 +797,11 @@ const styles = StyleSheet.create({
   },
   swipeActions: {
     justifyContent: "row",
-    alignItems: "row",
+    alignItems: "center",
     paddingHorizontal: width * 0.02,
   },
   deleteButton: {
-    backgroundColor: "#F44336", // Red delete button
+    backgroundColor: "#F44336",
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: height * 0.02,
@@ -831,16 +826,36 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.95)", // Change from 1 to 0.6 for blur effect
+    backgroundColor: "rgba(255, 255, 255, 0.5)", // Light white blur for light mode
+  },
+  darkModalWrapper: {
+    backgroundColor: "rgba(20, 20, 20, 0.7)", // Dark blur for dark mode
   },
   modalContainer: {
     width: "90%",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.97)", // Slightly transparent for glossy feel
     padding: width * 0.05,
     borderRadius: width * 0.03,
-    elevation: 5,
+    elevation: 15,
     borderTopWidth: 4,
     borderTopColor: "#007BFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 15,
+    // Add subtle inner shadow for depth
+    borderTopColor: "#007BFF",
+    borderWidth: 0.5,
+    borderLeftColor: "rgba(255, 255, 255, 0.9)",
+    borderRightColor: "rgba(255, 255, 255, 0.9)",
+    borderBottomColor: "rgba(255, 255, 255, 0.9)",
+  },
+  darkModalContainer: {
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    borderTopColor: "#2196F3",
+    borderColor: "rgba(60, 60, 60, 0.8)",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
   },
   modalTitle: {
     fontSize: width * 0.055,
@@ -872,7 +887,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cancelButton: {
-    backgroundColor: "#757575", // Dark gray cancel button instead of red
+    backgroundColor: "#757575", // Dark gray cancel button
   },
   saveButton: {
     backgroundColor: "#007BFF", // Blue save button
@@ -882,20 +897,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: width * 0.042,
   },
-  selectedPriorityButton: {
-    borderWidth: 3, // Thick border
-    borderColor: "#FFFFFF", // White border
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5, // Increased opacity for more noticeable shadow
-    shadowRadius: 5,
-    elevation: 10, // Higher elevation for better pop effect
-    transform: [{ scale: 1.1 }], // Make selected button slightly larger
-  },
-  unselectedPriorityButton: {
-    transform: [{ scale: 0.85 }], // Make unselected buttons significantly smaller (changed from 0.95)
-    opacity: 0.75, // Further reduce opacity for better contrast (changed from 0.85)
-    elevation: 1, // Reduce elevation to make it appear less prominent
+
+  // Dark Mode Styles
+  darkContainer: {
+    backgroundColor: "#121212",
   },
   darkHeaderRow: {
     backgroundColor: "#1E1E1E",
@@ -903,18 +908,6 @@ const styles = StyleSheet.create({
   },
   darkHeader: {
     color: "#FFFFFF",
-  },
-  darkModeToggle: {
-    position: "absolute",
-    right: width * 0.04,
-    padding: width * 0.02,
-    borderRadius: width * 0.02,
-  },
-  darkModeToggleText: {
-    fontSize: width * 0.06,
-  },
-  darkContainer: {
-    backgroundColor: "#121212",
   },
   darkInputContainer: {
     backgroundColor: "#1E1E1E",
