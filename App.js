@@ -110,20 +110,6 @@ export default function HomePage() {
     }
   }
 
-  // Schedule a notification for testing (10 seconds later)
-  async function scheduleTestNotification() {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Task Reminder",
-        body: `Time to complete: ${taskText} (${priority})`,
-        sound: true,
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-        channelId: "default",
-      },
-      trigger: new Date(Date.now() + 10000), // 10 seconds from now, 10000 milliseconds
-    });
-  }
-
   // Handle adding a task
   async function handleAddTask() {
     if (!taskText.trim()) {
@@ -145,16 +131,53 @@ export default function HomePage() {
       }),
     ]).start();
 
+    // Generate ID first before ANY other operations
+    const taskId = Date.now().toString();
+    
+    // Schedule notification using EXACTLY this ID - only do this once!
+    const notificationId = await scheduleTaskNotification(taskText, priority, taskId);
+
+    // Create task with the SAME ID
     const newTask = {
-      id: Date.now().toString(),
+      id: taskId,
       text: taskText,
       priority,
       completed: false,
+      notificationId: notificationId
     };
+    
     const updatedTasks = [...tasks, newTask];
     setTasks(updatedTasks);
     setTaskText("");
     await saveTasks(updatedTasks);
+  }
+
+  // Updated scheduleTaskNotification function
+  async function scheduleTaskNotification(text, priority, taskId) {
+    try {
+      // Important: This ensures the EXACT same ID is used everywhere
+      const notificationIdentifier = taskId;
+      
+      // Schedule notification
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Task Reminder",
+          body: `Time to complete: ${text} (${priority})`,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          channelId: "default",
+          data: { taskId: notificationIdentifier },
+        },
+        trigger: new Date(Date.now() + 10000),
+        identifier: notificationIdentifier,
+      });
+      
+      console.log(`Scheduled notification with identifier: ${notificationIdentifier}`);
+      return notificationIdentifier; 
+    } catch (error) {
+      console.error("Failed to schedule notification:", error);
+      return null;
+    }
   }
 
   // Handle editing a task
@@ -163,17 +186,47 @@ export default function HomePage() {
       Alert.alert("Validation", "Task cannot be empty.");
       return;
     }
-    const updatedTasks = tasks.map((task) =>
-      task.id === editTask.id
-        ? { ...task, text: editText, priority: editPriority }
-        : task
-    );
-    setTasks(updatedTasks);
-    setEditTask(null);
-    setEditText("");
-    setEditPriority("");
-    setModalVisible(false);
-    await saveTasks(updatedTasks);
+
+    try {
+      // Find the task to get its notification ID
+      const taskToEdit = tasks.find(task => task.id === editTask.id);
+      
+      // Cancel the existing notification using the task ID (which is the same as notification ID)
+      if (taskToEdit) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(taskToEdit.id);
+          console.log(`Cancelled notification for edited task: ${taskToEdit.id}`);
+        } catch (error) {
+          console.error("Failed to cancel notification:", error);
+        }
+      }
+      
+      // Schedule a new notification - passing the SAME task ID
+      const notificationId = await scheduleTaskNotification(
+        editText,
+        editPriority,
+        editTask.id // Use the existing task ID to keep consistency
+      );
+      
+      // Update the task
+      const updatedTasks = tasks.map((task) =>
+        task.id === editTask.id ? {
+          ...task,
+          text: editText,
+          priority: editPriority,
+          notificationId: notificationId // This should be the same as task.id now
+        } : task
+      );
+      
+      setTasks(updatedTasks);
+      setEditTask(null);
+      setEditText("");
+      setEditPriority("");
+      setModalVisible(false);
+      await saveTasks(updatedTasks);
+    } catch (error) {
+      console.error("Error editing task:", error);
+    }
   }
 
   // Animate priority selection
@@ -212,9 +265,40 @@ export default function HomePage() {
 
   // Delete a task
   async function handleDeleteTask(taskId) {
-    const updatedTasks = tasks.filter((task) => task.id !== taskId);
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
+    try {
+      // Find the task to get its notification ID and identifier
+      const taskToDelete = tasks.find(task => task.id === taskId);
+      
+      if (taskToDelete) {
+        // Use the task ID itself as the notification identifier (matching how it's created)
+        const notificationIdentifier = taskId;
+        
+        // Cancel using both methods to ensure it's completely stopped
+        await Notifications.cancelScheduledNotificationAsync(notificationIdentifier);
+        
+        // For Android, try dismissing any already shown notifications
+        if (Platform.OS === 'android') {
+          try {
+            await Notifications.dismissNotificationAsync(notificationIdentifier);
+          } catch (dismissError) {
+            console.log("No active notification to dismiss");
+          }
+        }
+        
+        console.log(`Cancelled notification with identifier: ${notificationIdentifier}`);
+      }
+      
+      // Remove the task from state and storage
+      const updatedTasks = tasks.filter((task) => task.id !== taskId);
+      setTasks(updatedTasks);
+      await saveTasks(updatedTasks);
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      // Proceed with deletion even if notification cancellation fails
+      const updatedTasks = tasks.filter((task) => task.id !== taskId);
+      setTasks(updatedTasks);
+      await saveTasks(updatedTasks);
+    }
   }
 
   const renderItem = ({ item, index }) => (
@@ -308,6 +392,36 @@ export default function HomePage() {
     }
   }
 
+  // Add this to your useEffect
+  useEffect(() => {
+    // Your existing code...
+    
+    // Add notification received listener for debugging
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      try {
+        // Get the taskId directly from the notification identifier
+        const notificationId = notification.request.identifier;
+        
+        console.log(`Notification received with ID: ${notificationId}`);
+        
+        // Check if the task still exists by checking if this ID exists in tasks
+        const taskExists = tasks.some(task => task.id === notificationId);
+        
+        if (!taskExists) {
+          console.log(`Task ${notificationId} no longer exists, dismissing notification`);
+          Notifications.dismissNotificationAsync(notificationId);
+        }
+      } catch (error) {
+        console.error("Error handling notification:", error);
+      }
+    });
+    
+    return () => {
+      // Your existing cleanup code...
+      notificationListener.remove();
+    };
+  }, [tasks]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar
@@ -354,7 +468,6 @@ export default function HomePage() {
             ]}
             disabled={!taskText.trim()}
             onPress={() => {
-              scheduleTestNotification();
               handleAddTask();
             }}
           >
