@@ -183,6 +183,13 @@ export default function HomePage() {
     const updatedTasks = [...tasks, newTask];
     setTasks(updatedTasks);
     setTaskText("");
+    
+    // Reset priority to Medium after adding task
+    setPriority("Medium");
+    
+    // Also reset the animation for visual feedback
+    priorityAnimation.setValue(1);
+    
     await saveTasks(updatedTasks);
   }
 
