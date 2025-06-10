@@ -40,8 +40,8 @@ My Tasks is a feature-rich task management application that combines simplicity 
 - git clone https://github.com/Utsoliya05/My-Tasks.git
  -cd My-Tasks
 
-2.Install dependencies
--npm install
+2. Install dependencies
+- npm install
 # or
 - yarn install
 
@@ -74,10 +74,10 @@ Solution:
 - Designed a comprehensive theme system with carefully selected color palettes for both modes, including proper contrast ratios for text readability and thoughtful status bar integration.
 
 Technical Implementation Details
-Task Data Structure
+- Task Data Structure
 Each task is stored with the following properties:
 
-{
+- {
   id: string,            // Unique identifier (timestamp)
   text: string,          // Task description
   priority: string,      // "High", "Medium", or "Low"
@@ -86,7 +86,7 @@ Each task is stored with the following properties:
 }
 
 Notification System
-Notifications are scheduled using Expo's notification API with a 10-second delay for demonstration purposes. In a production app, this would be configured with more practical timing options.
+- Notifications are scheduled using Expo's notification API with a 10-second delay for demonstration purposes. In a production app, this would be configured with more practical timing options.
 
 UI/UX Considerations
 - Responsive Design: All UI elements scale appropriately based on device dimensions
