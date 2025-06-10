@@ -40,11 +40,11 @@ export default function HomePage() {
   const [isModalVisible, setModalVisible] = useState(false);
   const [addButtonAnim] = useState(new Animated.Value(1));
   // Add this line with your other state declarations at the top of your component
-const [editTask, setEditTask] = useState(null); // Add this line to define editTask state
-// Add this state for edit modal priority
-const [editPriority, setEditPriority] = useState("");
-// Add this state at the top with your other state declarations
-const [isDarkMode, setIsDarkMode] = useState(false);
+  const [editTask, setEditTask] = useState(null); // Add this line to define editTask state
+  // Add this state for edit modal priority
+  const [editPriority, setEditPriority] = useState("");
+  // Add this state at the top with your other state declarations
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Request notification permissions & setup channel on mount
   useEffect(() => {
@@ -68,10 +68,27 @@ const [isDarkMode, setIsDarkMode] = useState(false);
     loadTasks();
 
     // Set status bar style explicitly
-    StatusBar.setBarStyle('dark-content');
-    if (Platform.OS === 'android') {
-      StatusBar.setBackgroundColor('#F8F9FA');
+    StatusBar.setBarStyle("dark-content");
+    if (Platform.OS === "android") {
+      StatusBar.setBackgroundColor("#F8F9FA");
     }
+  }, []);
+
+  // Load dark mode preference
+  useEffect(() => {
+    async function loadDarkModePreference() {
+      try {
+        const savedMode = await AsyncStorage.getItem('darkMode');
+        if (savedMode !== null) {
+          setIsDarkMode(savedMode === 'true');
+        }
+      } catch (error) {
+        console.error('Failed to load dark mode preference:', error);
+      }
+    }
+    
+    loadDarkModePreference();
+    // Other existing useEffect code...
   }, []);
 
   async function loadTasks() {
@@ -147,7 +164,9 @@ const [isDarkMode, setIsDarkMode] = useState(false);
       return;
     }
     const updatedTasks = tasks.map((task) =>
-      task.id === editTask.id ? { ...task, text: editText, priority: editPriority } : task
+      task.id === editTask.id
+        ? { ...task, text: editText, priority: editPriority }
+        : task
     );
     setTasks(updatedTasks);
     setEditTask(null);
@@ -160,10 +179,10 @@ const [isDarkMode, setIsDarkMode] = useState(false);
   // Animate priority selection
   function handlePrioritySelect(selectedPriority) {
     setPriority(selectedPriority);
-    
+
     // Reset animation value to ensure consistent behavior
     priorityAnimation.setValue(1);
-    
+
     // Improved animation sequence
     Animated.sequence([
       // Scale up more noticeably
@@ -214,25 +233,29 @@ const [isDarkMode, setIsDarkMode] = useState(false);
       <View
         style={[
           styles.taskItem,
-          item.priority === "High" && styles.highPriorityBackground,
-          item.priority === "Medium" && styles.mediumPriorityBackground,
-          item.priority === "Low" && styles.lowPriorityBackground,
+          isDarkMode && styles.darkTaskItem,
+          item.priority === "High" && (isDarkMode ? styles.darkHighPriority : styles.highPriorityBackground),
+          item.priority === "Medium" && (isDarkMode ? styles.darkMediumPriority : styles.mediumPriorityBackground),
+          item.priority === "Low" && (isDarkMode ? styles.darkLowPriority : styles.lowPriorityBackground),
         ]}
       >
-        <TouchableOpacity
-          style={styles.taskContent}
-          onPress={() => toggleTaskCompletion(item.id)}
-        >
-          <Text style={styles.taskNumber}>{index + 1}.</Text>
+        {/* Task content */}
+        <TouchableOpacity style={styles.taskContent} onPress={() => toggleTaskCompletion(item.id)}>
+          <Text style={[
+            styles.taskNumber,
+            isDarkMode && styles.darkTaskNumber
+          ]}>{index + 1}.</Text>
           <Text
             style={[
               styles.taskText,
+              isDarkMode && styles.darkTaskText,
               item.completed && styles.completedTaskText,
             ]}
           >
             {item.text}
           </Text>
         </TouchableOpacity>
+        {/* Edit button */}
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => {
@@ -249,45 +272,77 @@ const [isDarkMode, setIsDarkMode] = useState(false);
   );
 
   // Add this function to handle edit priority selection
-function handleEditPrioritySelect(selectedPriority) {
-  setEditPriority(selectedPriority);
-  
-  // Reset animation value to ensure consistent behavior
-  priorityAnimation.setValue(1);
-  
-  // Improved animation sequence for edit modal
-  Animated.sequence([
-    // Scale up more noticeably
-    Animated.timing(priorityAnimation, {
-      toValue: 1.15,
-      duration: 150,
-      useNativeDriver: true,
-    }),
-    // Bounce back with slight overshoot
-    Animated.spring(priorityAnimation, {
-      toValue: 1,
-      friction: 5,
-      tension: 100,
-      useNativeDriver: true,
-    }),
-  ]).start();
-}
+  function handleEditPrioritySelect(selectedPriority) {
+    setEditPriority(selectedPriority);
+
+    // Reset animation value to ensure consistent behavior
+    priorityAnimation.setValue(1);
+
+    // Improved animation sequence for edit modal
+    Animated.sequence([
+      // Scale up more noticeably
+      Animated.timing(priorityAnimation, {
+        toValue: 1.15,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      // Bounce back with slight overshoot
+      Animated.spring(priorityAnimation, {
+        toValue: 1,
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+
+  // Update function to toggle and save dark mode
+  async function toggleDarkMode() {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    
+    try {
+      await AsyncStorage.setItem('darkMode', String(newMode));
+    } catch (error) {
+      console.error('Failed to save dark mode preference:', error);
+    }
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="dark-content"  backgroundColor="#F8F9FA" 
-      translucent={false}  />
-      <View style={styles.container}>
+      <StatusBar
+        bbarStyle={isDarkMode ? "light-content" : "dark-content"}
+        backgroundColor={isDarkMode ? "#121212" : "#F8F9FA"}
+        translucent={false}
+      />
+      <View style={[styles.container, isDarkMode && styles.darkContainer]}>
         {/* Header Row - Remove add button from here */}
-        <View style={styles.headerRow}>
-          <Text style={styles.header}>{"My Tasks"}</Text>
+        <View style={[styles.headerRow, isDarkMode && styles.darkHeaderRow]}>
+          <Text style={[styles.header, isDarkMode && styles.darkHeader]}>
+            {"My Tasks"}
+          </Text>
+
+          <TouchableOpacity
+            style={styles.darkModeToggle}
+            onPress={() => setIsDarkMode((prev) => !prev)}
+          >
+            <Text style={styles.darkModeToggleText}>
+              {isDarkMode ? "☀️" : "🌙"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Task Input with Add button on right */}
-        <View style={styles.inputContainer}>
+        <View
+          style={[
+            styles.inputContainer,
+            isDarkMode && styles.darkInputContainer,
+          ]}
+        >
           <TextInput
-            style={styles.inputWithButton}
+            style={[styles.inputWithButton, isDarkMode && styles.darkInput]}
             placeholder="Task Title"
+            placeholderTextColor={isDarkMode ? "#888" : "#999"}
             value={taskText}
             onChangeText={setTaskText}
           />
@@ -308,29 +363,36 @@ function handleEditPrioritySelect(selectedPriority) {
         </View>
 
         {/* Priority Row */}
-        <View style={styles.priorityRow}>
+        <View style={[
+  styles.priorityRow,
+  isDarkMode && styles.darkPriorityRow
+]}>
           {["High", "Medium", "Low"].map((level) => (
             <TouchableOpacity
               key={level}
               style={[
                 styles.priorityButton,
                 styles[level.toLowerCase()],
-                priority === level && styles.selectedPriorityButton, 
+                priority === level && styles.selectedPriorityButton,
                 priority !== level && styles.unselectedPriorityButton, // Apply unselected style
               ]}
               onPress={() => handlePrioritySelect(level)}
               activeOpacity={0.7}
             >
-              <Text style={styles.priorityText}>
-                {level}
-              </Text>
+              <Text style={styles.priorityText}>{level}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Task List Section */}
-        <View style={styles.taskListContainer}>
-          <Text style={styles.taskListHeading}>Added Tasks</Text>
+        <View style={[
+  styles.taskListContainer,
+  isDarkMode && styles.darkTaskListContainer
+]}>
+          <Text style={[
+    styles.taskListHeading,
+    isDarkMode && styles.darkTaskListHeading
+  ]}>Added Tasks</Text>
           <FlatList
             data={tasks}
             keyExtractor={(item) => item.id}
@@ -340,60 +402,67 @@ function handleEditPrioritySelect(selectedPriority) {
         </View>
 
         {/* Edit Modal with improved background blur */}
-        <Modal 
-  visible={isModalVisible} 
-  transparent 
-  animationType="slide"
->
-  <View style={styles.modalWrapper}>
-    <View style={styles.modalContainer}>
-      <Text style={styles.modalTitle}>Edit Task</Text>
-      <TextInput
-        style={styles.modalInput}
-        placeholder="Task Title"
-        value={editText}
-        onChangeText={setEditText}
-      />
-      {/* Update the Edit Modal priority buttons */}
-      <View style={styles.priorityRow}>
-        {["High", "Medium", "Low"].map((level) => (
-          <TouchableOpacity
-            key={level}
-            style={[
-              styles.priorityButton,
-              styles[level.toLowerCase()],
-              editPriority === level && styles.selectedPriorityButton,
-              editPriority !== level && styles.unselectedPriorityButton,
-            ]}
-            onPress={() => handleEditPrioritySelect(level)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.priorityText}>
-              {level}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.modalActions}>
-        <TouchableOpacity
-          style={[styles.modalButton, styles.cancelButton]}
-          onPress={() => {
-            setModalVisible(false);
-            setEditTask(null);
-          }}
-        >
-          <Text style={styles.modalButtonText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.modalButton, styles.saveButton]}
-          onPress={() => handleEditTask()}
-        >
-          <Text style={styles.modalButtonText}>Save</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</Modal>
+        <Modal visible={isModalVisible} transparent animationType="slide">
+          <View style={[
+            styles.modalWrapper,
+            isDarkMode && styles.darkModalWrapper
+          ]}>
+            <View style={[
+              styles.modalContainer,
+              isDarkMode && styles.darkModalContainer
+            ]}>
+              <Text style={[
+                styles.modalTitle,
+                isDarkMode && styles.darkModalTitle
+              ]}>Edit Task</Text>
+              <TextInput
+                style={[
+                  styles.modalInput,
+                  isDarkMode && styles.darkModalInput
+                ]}
+                placeholder="Task Title"
+                placeholderTextColor={isDarkMode ? "#888" : "#999"}
+                value={editText}
+                onChangeText={setEditText}
+              />
+              {/* Update the Edit Modal priority buttons */}
+              <View style={styles.priorityRow}>
+                {["High", "Medium", "Low"].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.priorityButton,
+                      styles[level.toLowerCase()],
+                      editPriority === level && styles.selectedPriorityButton,
+                      editPriority !== level && styles.unselectedPriorityButton,
+                    ]}
+                    onPress={() => handleEditPrioritySelect(level)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.priorityText}>{level}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setModalVisible(false);
+                    setEditTask(null);
+                  }}
+                >
+                  <Text style={styles.modalButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={() => handleEditTask()}
+                >
+                  <Text style={styles.modalButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -702,7 +771,7 @@ const styles = StyleSheet.create({
   },
   selectedPriorityButton: {
     borderWidth: 3, // Thick border
-    borderColor: '#FFFFFF', // White border
+    borderColor: "#FFFFFF", // White border
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.5, // Increased opacity for more noticeable shadow
@@ -714,5 +783,79 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.85 }], // Make unselected buttons significantly smaller (changed from 0.95)
     opacity: 0.75, // Further reduce opacity for better contrast (changed from 0.85)
     elevation: 1, // Reduce elevation to make it appear less prominent
+  },
+  darkHeaderRow: {
+    backgroundColor: "#1E1E1E",
+    borderLeftColor: "#2196F3",
+  },
+  darkHeader: {
+    color: "#FFFFFF",
+  },
+  darkModeToggle: {
+    position: "absolute",
+    right: width * 0.04,
+    padding: width * 0.02,
+    borderRadius: width * 0.02,
+  },
+  darkModeToggleText: {
+    fontSize: width * 0.06,
+  },
+  darkContainer: {
+    backgroundColor: "#121212",
+  },
+  darkInputContainer: {
+    backgroundColor: "#1E1E1E",
+  },
+  darkInput: {
+    backgroundColor: "#333",
+    borderColor: "#555",
+    color: "#FFFFFF",
+  },
+  darkPriorityRow: {
+    backgroundColor: "#1E1E1E",
+  },
+  darkTaskListContainer: {
+    backgroundColor: "#1E1E1E",
+    borderTopColor: "#2196F3",
+  },
+  darkTaskListHeading: {
+    color: "#FFFFFF",
+    borderBottomColor: "#333",
+  },
+  darkTaskItem: {
+    backgroundColor: "#2D2D2D",
+  },
+  darkTaskText: {
+    color: "#FFFFFF",
+  },
+  darkTaskNumber: {
+    color: "#AAAAAA",
+  },
+  darkHighPriority: {
+    backgroundColor: "#331111",
+    borderLeftColor: "#E53935",
+  },
+  darkMediumPriority: {
+    backgroundColor: "#332211",
+    borderLeftColor: "#FF9800",
+  },
+  darkLowPriority: {
+    backgroundColor: "#113322",
+    borderLeftColor: "#00897B",
+  },
+  darkModalWrapper: {
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+  },
+  darkModalContainer: {
+    backgroundColor: "#1E1E1E",
+    borderTopColor: "#2196F3",
+  },
+  darkModalTitle: {
+    color: "#FFFFFF",
+  },
+  darkModalInput: {
+    backgroundColor: "#333",
+    borderColor: "#555",
+    color: "#FFFFFF",
   },
 });
