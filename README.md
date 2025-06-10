@@ -37,37 +37,41 @@ My Tasks is a feature-rich task management application that combines simplicity 
 ## Installation
 
 1. Clone this repository
-git clone https://github.com/Utsoliya05/My-Tasks.git
-cd My-Tasks
+- git clone https://github.com/Utsoliya05/My-Tasks.git
+ -cd My-Tasks
 
 2.Install dependencies
-  npm install
+-npm install
 # or
-yarn install
+- yarn install
 
 3. Start the development server
-npx expo start
+- npx expo start
 
 4. Run on your preferred platform:
-Scan the QR code with Expo Go app on Android
-Scan with Camera app on iOS
-Press 'a' for Android emulator or 'i' for iOS simulator
+- Scan the QR code with Expo Go app on Android
+- Scan with Camera app on iOS
+- Press 'a' for Android emulator or 'i' for iOS simulator
 
-Development Challenges & Solutions
-Notification Handling
-The biggest challenge was ensuring proper notification management across the application lifecycle. When a task is deleted or edited, its associated notification needed to be properly canceled to prevent orphaned notifications.
+5. Development Challenges & Solutions
 
-Solution: Implemented a consistent ID system where each notification uses the same identifier as its associated task, allowing for reliable cancellation and tracking. Added an extra layer of protection with a listener that automatically dismisses notifications for deleted tasks.
+- Notification Handling
+-The biggest challenge was ensuring proper notification management across the application lifecycle. When a task is deleted or edited, its associated notification needed to be properly canceled to prevent orphaned notifications.
 
-State Synchronization
-Maintaining consistent state between the UI, local storage, and notification system required careful coordination.
+Solution:
+- Implemented a consistent ID system where each notification uses the same identifier as its associated task, allowing for reliable cancellation and tracking. Added an extra layer of protection with a listener that automatically dismisses notifications for deleted tasks.
 
-Solution: Developed a clean state management approach using React hooks with proper async handling to ensure data integrity across all app components and services.
+- State Synchronization
+-Maintaining consistent state between the UI, local storage, and notification system required careful coordination.
+
+Solution: 
+- Developed a clean state management approach using React hooks with proper async handling to ensure data integrity across all app components and services.
 
 Dark Mode Implementation
-Creating a visually appealing dark mode that maintained usability while reducing eye strain.
+- Creating a visually appealing dark mode that maintained usability while reducing eye strain.
 
-Solution: Designed a comprehensive theme system with carefully selected color palettes for both modes, including proper contrast ratios for text readability and thoughtful status bar integration.
+Solution: 
+- Designed a comprehensive theme system with carefully selected color palettes for both modes, including proper contrast ratios for text readability and thoughtful status bar integration.
 
 Technical Implementation Details
 Task Data Structure
