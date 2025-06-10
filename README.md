@@ -37,8 +37,8 @@ My Tasks is a feature-rich task management application that combines simplicity 
 ## Installation
 
 1. Clone this repository
-git clone https://github.com/yourusername/my-tasks.git
-cd my-tasks
+git clone https://github.com/Utsoliya05/My-Tasks.git
+cd My-Tasks
 
 2.Install dependencies
 npm install
