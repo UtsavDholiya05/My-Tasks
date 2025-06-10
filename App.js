@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
 
   // Task List Section
   taskListContainer: {
-    flex: 1,
+    flex: 0.95,
     width: "100%",
     backgroundColor: "#FFFFFF",
     borderRadius: width * 0.03,
