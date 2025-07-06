@@ -19,6 +19,7 @@ import {
   Swipeable,
 } from "react-native-gesture-handler";
 import * as Notifications from "expo-notifications";
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Configure notification handling
 Notifications.setNotificationHandler({
@@ -31,18 +32,44 @@ Notifications.setNotificationHandler({
 
 const { width, height } = Dimensions.get("window");
 
+// Notification timing options
+const NOTIFICATION_OPTIONS = [
+  { label: "No Notification", value: "none", milliseconds: 0 },
+  { label: "10 Seconds", value: "10s", milliseconds: 10 * 1000 },
+  { label: "1 Minute", value: "1m", milliseconds: 1 * 60 * 1000 },
+  { label: "5 Minutes", value: "5m", milliseconds: 5 * 60 * 1000 },
+  { label: "30 Minutes", value: "30m", milliseconds: 30 * 60 * 1000 },
+  { label: "1 Hour", value: "1h", milliseconds: 1 * 60 * 60 * 1000 },
+  { label: "2 Hours", value: "2h", milliseconds: 2 * 60 * 60 * 1000 },
+  { label: "6 Hours", value: "6h", milliseconds: 6 * 60 * 60 * 1000 },
+  { label: "12 Hours", value: "12h", milliseconds: 12 * 60 * 60 * 1000 },
+  { label: "1 Day", value: "1d", milliseconds: 1 * 24 * 60 * 60 * 1000 },
+  { label: "2 Days", value: "2d", milliseconds: 2 * 24 * 60 * 60 * 1000 },
+  { label: "3 Days", value: "3d", milliseconds: 3 * 24 * 60 * 60 * 1000 },
+  { label: "1 Week", value: "1w", milliseconds: 7 * 24 * 60 * 60 * 1000 },
+  { label: "Custom Date & Time", value: "custom", milliseconds: 0 },
+];
+
 export default function HomePage() {
   // State management
   const [tasks, setTasks] = useState([]);
   const [taskText, setTaskText] = useState("");
-  const [priority, setPriority] = useState("Medium");
-  const [priorityAnimation] = useState(new Animated.Value(1));
+  // const [priority, setPriority] = useState("Medium"); // Commented out priority
+  // const [priorityAnimation] = useState(new Animated.Value(1)); // Commented out priority animation
   const [editText, setEditText] = useState("");
   const [isModalVisible, setModalVisible] = useState(false);
   const [addButtonAnim] = useState(new Animated.Value(1));
   const [editTask, setEditTask] = useState(null);
-  const [editPriority, setEditPriority] = useState("");
+  // const [editPriority, setEditPriority] = useState(""); // Commented out edit priority
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // New state for date/time picker
+  const [notificationDate, setNotificationDate] = useState(new Date(Date.now() + 60000)); // Default 1 minute from now
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [editNotificationDate, setEditNotificationDate] = useState(new Date());
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
+  const [showEditTimePicker, setShowEditTimePicker] = useState(false);
 
   // Initialize app with notifications and load data
   useEffect(() => {
@@ -151,6 +178,12 @@ export default function HomePage() {
       return;
     }
 
+    // Check if notification date is in the future
+    if (notificationDate <= new Date()) {
+      Alert.alert("Invalid Date", "Please select a future date and time for the notification.");
+      return;
+    }
+
     // Animate the add button
     Animated.sequence([
       Animated.timing(addButtonAnim, {
@@ -168,52 +201,48 @@ export default function HomePage() {
     // Generate ID first before any other operations
     const taskId = Date.now().toString();
     
-    // Schedule notification using the task ID
-    const notificationId = await scheduleTaskNotification(taskText, priority, taskId);
+    // Schedule notification using the task ID and selected date/time
+    const notificationId = await scheduleTaskNotification(taskText, taskId, notificationDate);
 
-    // Create task with the same ID
+    // Create task with the same ID (removed priority)
     const newTask = {
       id: taskId,
       text: taskText,
-      priority,
       completed: false,
-      notificationId: notificationId
+      notificationId: notificationId,
+      notificationDate: notificationDate.toISOString()
     };
     
     const updatedTasks = [...tasks, newTask];
     setTasks(updatedTasks);
     setTaskText("");
     
-    // Reset priority to Medium after adding task
-    setPriority("Medium");
-    
-    // Also reset the animation for visual feedback
-    priorityAnimation.setValue(1);
+    // Reset notification date to 1 minute from now
+    setNotificationDate(new Date(Date.now() + 60000));
     
     await saveTasks(updatedTasks);
   }
 
-  // Schedule a notification for a task
-  async function scheduleTaskNotification(text, priority, taskId) {
+  // Schedule a notification for a task (updated to use custom date/time)
+  async function scheduleTaskNotification(text, taskId, scheduledDate) {
     try {
-      // Use the task ID as the notification identifier
       const notificationIdentifier = taskId;
       
-      // Schedule notification
+      // Schedule notification for the specified date/time
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Task Reminder",
-          body: `Time to complete: ${text} (${priority})`,
+          body: `Time to complete: ${text}`,
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           channelId: "default",
           data: { taskId: notificationIdentifier },
         },
-        trigger: new Date(Date.now() + 10000),
+        trigger: scheduledDate,
         identifier: notificationIdentifier,
       });
       
-      console.log(`Scheduled notification with identifier: ${notificationIdentifier}`);
+      console.log(`Scheduled notification with identifier: ${notificationIdentifier} for ${scheduledDate}`);
       return notificationIdentifier; 
     } catch (error) {
       console.error("Failed to schedule notification:", error);
@@ -221,10 +250,16 @@ export default function HomePage() {
     }
   }
 
-  // Edit an existing task
+  // Edit an existing task (updated to handle new date/time)
   async function handleEditTask() {
     if (!editText.trim()) {
       Alert.alert("Validation", "Task cannot be empty.");
+      return;
+    }
+
+    // Check if notification date is in the future
+    if (editNotificationDate <= new Date()) {
+      Alert.alert("Invalid Date", "Please select a future date and time for the notification.");
       return;
     }
 
@@ -242,20 +277,20 @@ export default function HomePage() {
         }
       }
       
-      // Schedule a new notification using the same task ID
+      // Schedule a new notification using the same task ID and new date/time
       const notificationId = await scheduleTaskNotification(
         editText,
-        editPriority,
-        editTask.id
+        editTask.id,
+        editNotificationDate
       );
       
-      // Update the task
+      // Update the task (removed priority)
       const updatedTasks = tasks.map((task) =>
         task.id === editTask.id ? {
           ...task,
           text: editText,
-          priority: editPriority,
-          notificationId: notificationId
+          notificationId: notificationId,
+          notificationDate: editNotificationDate.toISOString()
         } : task
       );
       
@@ -263,7 +298,6 @@ export default function HomePage() {
       setTasks(updatedTasks);
       setEditTask(null);
       setEditText("");
-      setEditPriority("");
       setModalVisible(false);
       await saveTasks(updatedTasks);
     } catch (error) {
@@ -271,51 +305,56 @@ export default function HomePage() {
     }
   }
 
-  // Animate priority selection in main screen
-  function handlePrioritySelect(selectedPriority) {
-    setPriority(selectedPriority);
+  // Handle date change for main screen
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const newDate = new Date(notificationDate);
+      newDate.setFullYear(selectedDate.getFullYear());
+      newDate.setMonth(selectedDate.getMonth());
+      newDate.setDate(selectedDate.getDate());
+      setNotificationDate(newDate);
+    }
+  };
 
-    // Reset animation value for consistent behavior
-    priorityAnimation.setValue(1);
+  // Handle time change for main screen
+  const onTimeChange = (event, selectedTime) => {
+    setShowTimePicker(false);
+    if (selectedTime) {
+      const newDate = new Date(notificationDate);
+      newDate.setHours(selectedTime.getHours());
+      newDate.setMinutes(selectedTime.getMinutes());
+      setNotificationDate(newDate);
+    }
+  };
 
-    // Animated sequence for button scaling
-    Animated.sequence([
-      // Scale up
-      Animated.timing(priorityAnimation, {
-        toValue: 1.15,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      // Bounce back with spring effect
-      Animated.spring(priorityAnimation, {
-        toValue: 1,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
+  // Handle date change for edit modal
+  const onEditDateChange = (event, selectedDate) => {
+    setShowEditDatePicker(false);
+    if (selectedDate) {
+      const newDate = new Date(editNotificationDate);
+      newDate.setFullYear(selectedDate.getFullYear());
+      newDate.setMonth(selectedDate.getMonth());
+      newDate.setDate(selectedDate.getDate());
+      setEditNotificationDate(newDate);
+    }
+  };
 
-  // Handle priority selection in edit modal
-  function handleEditPrioritySelect(selectedPriority) {
-    setEditPriority(selectedPriority);
+  // Handle time change for edit modal
+  const onEditTimeChange = (event, selectedTime) => {
+    setShowEditTimePicker(false);
+    if (selectedTime) {
+      const newDate = new Date(editNotificationDate);
+      newDate.setHours(selectedTime.getHours());
+      newDate.setMinutes(selectedTime.getMinutes());
+      setEditNotificationDate(newDate);
+    }
+  };
 
-    // Same animation as main screen
-    priorityAnimation.setValue(1);
-    Animated.sequence([
-      Animated.timing(priorityAnimation, {
-        toValue: 1.15,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.spring(priorityAnimation, {
-        toValue: 1,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
+  // Format date for display
+  const formatDate = (date) => {
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  };
 
   // Toggle task completion status
   async function toggleTaskCompletion(taskId) {
@@ -374,7 +413,7 @@ export default function HomePage() {
     }
   }
 
-  // Render individual task items
+  // Render individual task items (updated to remove priority styling)
   const renderItem = ({ item, index }) => (
     <Swipeable
       renderRightActions={() => (
@@ -392,9 +431,6 @@ export default function HomePage() {
         style={[
           styles.taskItem,
           isDarkMode && styles.darkTaskItem,
-          item.priority === "High" && (isDarkMode ? styles.darkHighPriority : styles.highPriorityBackground),
-          item.priority === "Medium" && (isDarkMode ? styles.darkMediumPriority : styles.mediumPriorityBackground),
-          item.priority === "Low" && (isDarkMode ? styles.darkLowPriority : styles.lowPriorityBackground),
         ]}
       >
         <TouchableOpacity style={styles.taskContent} onPress={() => toggleTaskCompletion(item.id)}>
@@ -402,22 +438,32 @@ export default function HomePage() {
             styles.taskNumber,
             isDarkMode && styles.darkTaskNumber
           ]}>{index + 1}.</Text>
-          <Text
-            style={[
-              styles.taskText,
-              isDarkMode && styles.darkTaskText,
-              item.completed && styles.completedTaskText,
-            ]}
-          >
-            {item.text}
-          </Text>
+          <View style={styles.taskTextContainer}>
+            <Text
+              style={[
+                styles.taskText,
+                isDarkMode && styles.darkTaskText,
+                item.completed && styles.completedTaskText,
+              ]}
+            >
+              {item.text}
+            </Text>
+            {item.notificationDate && (
+              <Text style={[
+                styles.notificationDateText,
+                isDarkMode && styles.darkNotificationDateText
+              ]}>
+                📅 {formatDate(new Date(item.notificationDate))}
+              </Text>
+            )}
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => {
             setEditTask(item);
             setEditText(item.text);
-            setEditPriority(item.priority);
+            setEditNotificationDate(item.notificationDate ? new Date(item.notificationDate) : new Date(Date.now() + 60000));
             setModalVisible(true);
           }}
         >
@@ -429,7 +475,6 @@ export default function HomePage() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* Status Bar configuration for both light and dark modes */}
       <StatusBar
         barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={isDarkMode ? "#121212" : "#F8F9FA"}
@@ -480,23 +525,29 @@ export default function HomePage() {
           </TouchableOpacity>
         </View>
 
-        {/* Priority Selection Buttons */}
-        <View style={[styles.priorityRow, isDarkMode && styles.darkPriorityRow]}>
-          {["High", "Medium", "Low"].map((level) => (
+        {/* Date and Time Selection Section */}
+        <View style={[styles.dateTimeContainer, isDarkMode && styles.darkDateTimeContainer]}>
+          <Text style={[styles.dateTimeLabel, isDarkMode && styles.darkDateTimeLabel]}>
+            Notification Time:
+          </Text>
+          <View style={styles.dateTimeButtons}>
             <TouchableOpacity
-              key={level}
-              style={[
-                styles.priorityButton,
-                styles[level.toLowerCase()],
-                priority === level && styles.selectedPriorityButton,
-                priority !== level && styles.unselectedPriorityButton,
-              ]}
-              onPress={() => handlePrioritySelect(level)}
-              activeOpacity={0.7}
+              style={[styles.dateTimeButton, isDarkMode && styles.darkDateTimeButton]}
+              onPress={() => setShowDatePicker(true)}
             >
-              <Text style={styles.priorityText}>{level}</Text>
+              <Text style={[styles.dateTimeButtonText, isDarkMode && styles.darkDateTimeButtonText]}>
+                📅 {notificationDate.toLocaleDateString()}
+              </Text>
             </TouchableOpacity>
-          ))}
+            <TouchableOpacity
+              style={[styles.dateTimeButton, isDarkMode && styles.darkDateTimeButton]}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Text style={[styles.dateTimeButtonText, isDarkMode && styles.darkDateTimeButtonText]}>
+                🕒 {notificationDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Task List Section */}
@@ -511,6 +562,26 @@ export default function HomePage() {
             contentContainerStyle={styles.taskList}
           />
         </View>
+
+        {/* Date/Time Pickers for main screen */}
+        {showDatePicker && (
+          <DateTimePicker
+            value={notificationDate}
+            mode="date"
+            display="default"
+            onChange={onDateChange}
+            minimumDate={new Date()}
+          />
+        )}
+
+        {showTimePicker && (
+          <DateTimePicker
+            value={notificationDate}
+            mode="time"
+            display="default"
+            onChange={onTimeChange}
+          />
+        )}
 
         {/* Edit Task Modal */}
         <Modal visible={isModalVisible} transparent animationType="slide">
@@ -527,23 +598,29 @@ export default function HomePage() {
                 onChangeText={setEditText}
               />
               
-              {/* Edit Modal Priority Selection */}
-              <View style={[styles.priorityRow, isDarkMode && styles.darkPriorityRow]}>
-                {["High", "Medium", "Low"].map((level) => (
+              {/* Date and Time Selection in Edit Modal */}
+              <View style={[styles.dateTimeContainer, isDarkMode && styles.darkDateTimeContainer]}>
+                <Text style={[styles.dateTimeLabel, isDarkMode && styles.darkDateTimeLabel]}>
+                  Notification Time:
+                </Text>
+                <View style={styles.dateTimeButtons}>
                   <TouchableOpacity
-                    key={level}
-                    style={[
-                      styles.priorityButton,
-                      styles[level.toLowerCase()],
-                      editPriority === level && styles.selectedPriorityButton,
-                      editPriority !== level && styles.unselectedPriorityButton,
-                    ]}
-                    onPress={() => handleEditPrioritySelect(level)}
-                    activeOpacity={0.7}
+                    style={[styles.dateTimeButton, isDarkMode && styles.darkDateTimeButton]}
+                    onPress={() => setShowEditDatePicker(true)}
                   >
-                    <Text style={styles.priorityText}>{level}</Text>
+                    <Text style={[styles.dateTimeButtonText, isDarkMode && styles.darkDateTimeButtonText]}>
+                      📅 {editNotificationDate.toLocaleDateString()}
+                    </Text>
                   </TouchableOpacity>
-                ))}
+                  <TouchableOpacity
+                    style={[styles.dateTimeButton, isDarkMode && styles.darkDateTimeButton]}
+                    onPress={() => setShowEditTimePicker(true)}
+                  >
+                    <Text style={[styles.dateTimeButtonText, isDarkMode && styles.darkDateTimeButtonText]}>
+                      🕒 {editNotificationDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               
               {/* Modal Action Buttons */}
@@ -566,13 +643,33 @@ export default function HomePage() {
               </View>
             </View>
           </View>
+
+          {/* Date/Time Pickers for edit modal */}
+          {showEditDatePicker && (
+            <DateTimePicker
+              value={editNotificationDate}
+              mode="date"
+              display="default"
+              onChange={onEditDateChange}
+              minimumDate={new Date()}
+            />
+          )}
+
+          {showEditTimePicker && (
+            <DateTimePicker
+              value={editNotificationDate}
+              mode="time"
+              display="default"
+              onChange={onEditTimeChange}
+            />
+          )}
         </Modal>
       </View>
     </GestureHandlerRootView>
   );
 }
 
-// Styles for the app
+// Updated styles with new notification timing styles
 const styles = StyleSheet.create({
   // Main Container
   container: {
@@ -654,58 +751,65 @@ const styles = StyleSheet.create({
     fontSize: width * 0.042,
   },
 
-  // Priority Selection Section
-  priorityRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: height * 0.025,
+  // Date and Time Selection Styles
+  dateTimeContainer: {
     backgroundColor: "#FFFFFF",
-    padding: width * 0.03,
+    padding: width * 0.04,
     borderRadius: width * 0.03,
+    marginBottom: height * 0.025,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  priorityButton: {
+  darkDateTimeContainer: {
+    backgroundColor: "#1E1E1E",
+  },
+  dateTimeLabel: {
+    fontSize: width * 0.045,
+    fontWeight: "600",
+    color: "#2C3E50",
+    marginBottom: height * 0.015,
+  },
+  darkDateTimeLabel: {
+    color: "#FFFFFF",
+  },
+  dateTimeButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  dateTimeButton: {
     flex: 1,
-    marginHorizontal: width * 0.015,
-    paddingVertical: height * 0.018,
-    borderRadius: width * 0.03,
+    backgroundColor: "#007BFF",
+    paddingVertical: height * 0.015,
+    paddingHorizontal: width * 0.04,
+    borderRadius: width * 0.025,
+    marginHorizontal: width * 0.01,
     alignItems: "center",
-    justifyContent: "center",
     elevation: 2,
   },
-  high: {
-    backgroundColor: "#E53935", // Red for high priority
+  darkDateTimeButton: {
+    backgroundColor: "#2196F3",
   },
-  medium: {
-    backgroundColor: "#FF9800", // Orange for medium priority
-  },
-  low: {
-    backgroundColor: "#00897B", // Teal for low priority
-  },
-  priorityText: {
-    color: "#fff",
+  dateTimeButtonText: {
+    color: "#FFFFFF",
     fontWeight: "600",
-    fontSize: width * 0.042,
-    textAlign: "center",
+    fontSize: width * 0.04,
   },
-  selectedPriorityButton: {
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 10,
-    transform: [{ scale: 1.1 }],
+  darkDateTimeButtonText: {
+    color: "#FFFFFF",
   },
-  unselectedPriorityButton: {
-    transform: [{ scale: 0.75 }],
-    opacity: 0.65,
-    elevation: 1,
+  taskTextContainer: {
+    flex: 1,
+  },
+  notificationDateText: {
+    fontSize: width * 0.035,
+    color: "#666",
+    marginTop: height * 0.005,
+  },
+  darkNotificationDateText: {
+    color: "#AAA",
   },
 
   // Task List Section
@@ -836,7 +940,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.5)", // Light white blur for light mode
   },
   darkModalWrapper: {
-    backgroundColor: "rgba(20, 20, 20, 0.7)", // Dark blur for dark mode
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
   },
   modalContainer: {
     width: "90%",
@@ -905,6 +1009,105 @@ const styles = StyleSheet.create({
     fontSize: width * 0.042,
   },
 
+  // Notification Timing Button
+  notificationTimingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    padding: width * 0.04,
+    borderRadius: width * 0.03,
+    marginBottom: height * 0.025,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  darkNotificationTimingButton: {
+    backgroundColor: "#1E1E1E",
+    borderColor: "#555",
+  },
+  notificationTimingText: {
+    fontSize: width * 0.045,
+    color: "#2C3E50",
+    fontWeight: "500",
+  },
+  darkNotificationTimingText: {
+    color: "#FFFFFF",
+  },
+  dropdownArrow: {
+    fontSize: width * 0.035,
+    color: "#666",
+  },
+
+  // Task Text Container
+  taskTextContainer: {
+    flex: 1,
+  },
+  notificationLabel: {
+    fontSize: width * 0.035,
+    color: "#666",
+    marginTop: 2,
+  },
+  darkNotificationLabel: {
+    color: "#AAA",
+  },
+
+  // Notification Modal Styles
+  notificationModalContainer: {
+    width: "85%",
+    maxHeight: "70%",
+    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    padding: width * 0.05,
+    borderRadius: width * 0.03,
+    elevation: 15,
+    borderTopWidth: 4,
+    borderTopColor: "#007BFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 15,
+  },
+  darkNotificationModalContainer: {
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    borderTopColor: "#2196F3",
+  },
+  notificationOptionsContainer: {
+    maxHeight: height * 0.4,
+    marginBottom: height * 0.02,
+  },
+  notificationOption: {
+    padding: width * 0.04,
+    borderRadius: width * 0.02,
+    marginBottom: height * 0.01,
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  darkNotificationOption: {
+    backgroundColor: "#333",
+    borderColor: "#555",
+  },
+  selectedNotificationOption: {
+    backgroundColor: "#007BFF",
+    borderColor: "#007BFF",
+  },
+  notificationOptionText: {
+    fontSize: width * 0.042,
+    color: "#2C3E50",
+    textAlign: "center",
+  },
+  darkNotificationOptionText: {
+    color: "#FFFFFF",
+  },
+  selectedNotificationOptionText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+
   // Dark Mode Styles
   darkContainer: {
     backgroundColor: "#121212",
@@ -937,38 +1140,38 @@ const styles = StyleSheet.create({
   },
   darkTaskItem: {
     backgroundColor: "#2D2D2D",
-  },
+  },backgroundColor: "#2D2D2D",
   darkTaskText: {
     color: "#FFFFFF",
-  },
+  },color: "#FFFFFF",
   darkTaskNumber: {
     color: "#AAAAAA",
-  },
+  },color: "#AAAAAA",
   darkHighPriority: {
     backgroundColor: "#331111",
     borderLeftColor: "#E53935",
-  },
+  },borderLeftColor: "#E53935",
   darkMediumPriority: {
     backgroundColor: "#332211",
     borderLeftColor: "#FF9800",
-  },
+  },borderLeftColor: "#FF9800",
   darkLowPriority: {
     backgroundColor: "#113322",
     borderLeftColor: "#00897B",
-  },
+  },borderLeftColor: "#00897B",
   darkModalWrapper: {
     backgroundColor: "rgba(0, 0, 0, 0.9)",
-  },
+  },backgroundColor: "rgba(0, 0, 0, 0.9)",
   darkModalContainer: {
     backgroundColor: "#1E1E1E",
     borderTopColor: "#2196F3",
-  },
+  },borderTopColor: "#2196F3",
   darkModalTitle: {
     color: "#FFFFFF",
-  },
+  },color: "#FFFFFF",
   darkModalInput: {
     backgroundColor: "#333",
     borderColor: "#555",
-    color: "#FFFFFF",
-  },
+        color: "#FFFFFF",
+  },color: "#FFFFFF",
 });
